@@ -1,0 +1,21 @@
+module.exports = {
+    studentModel : require('./student'),
+    parentModel: require('./parent'),
+    staffModel:require('./staff'),
+    SuperAdminModel: require("./superAdmin"),
+    announcementModel: require("./announcement"),
+    classLevelModel: require("./classLevel"),
+    classArmModel: require("./classArm"),
+    SubjectModel: require("./subject"),
+    specificSubjectModel: require("./specificSubject"),
+    timeTableModel: require("./timetable"),
+    periodTimeModel: require("./periodTime"),
+    gradeModel : require("./grade"),
+    staffAttendanceModel: require("./staff_attendance"),
+    studentAttendanceModel: require("./student_attendance"),
+    sessionModel: require("./session"),
+    termModel: require("./term"),
+    feeModel: require("./fee"),
+    resultModel: require('./result'),
+    assessmentModel: require("./assessment")
+}

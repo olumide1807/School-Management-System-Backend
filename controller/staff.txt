@@ -1,0 +1,163 @@
+exports.getAttendance = asyncHandler(async (req, res, next) => {
+  try {
+    // extract the schoolId from req.user
+    const { user } = req;
+    const schoolId = user.schoolName ? user.id : user.schoolId;
+
+    const filter = { schoolId: schoolId };
+
+    if (req.query) {
+      const { query } = req;
+
+      if (query.staffId) {
+        if (isValidMongoId(query.staffId)) {
+          filter.staffId = query.staffId;
+        } else {
+          return next(new ErrorResponse("Invalid staffId provided!", 400));
+        }
+      }
+      if (query.date) {
+        // check if date is valid
+        filter.date = query.date;
+      }
+      if (query.sessionId) {
+        if (isValidMongoId(query.sessionId)) {
+          filter.sessionId = query.sessionId;
+        } else {
+          return next(new ErrorResponse("Invalid sessionId provided!", 400));
+        }
+      }
+      if (query.term) {
+        if (
+          query.term === "first" ||
+          query.term === "second" ||
+          query.term === "third"
+        ) {
+          filter.term = query.term;
+        } else {
+          return next(new ErrorResponse("Invalid term provided!", 400));
+        }
+      }
+      if (query.status) {
+        if (query.status === true || query.status === false) {
+          filter.status = query.status;
+        } else {
+          return next(new ErrorResponse("Invalid status provided!", 400));
+        }
+      }
+      if (query.staffType) {
+        if (
+          query.staffType === "academic" ||
+          query.staffType === "non-academic" ||
+          query.staffType === "admin"
+        ) {
+          filter.staffType = query.staffType;
+        } else {
+          return next(new ErrorResponse("Invalid staff type provided!", 400));
+        }
+      }
+    }
+
+    let attendance;
+
+    if (filter.staffId) {
+      attendance = await staffAttendanceModel.findOne(query);
+
+      if (!attendance) {
+        return next(
+          new ErrorResponse(
+            "No specific attendance match with your request!. It could be that the ID or some other queries are incorrect.",
+            400
+          )
+        );
+      }
+
+      return successResponse(res, 200, null, attendance);
+    }
+
+    attendance = await staffAttendanceModel.find(query);
+
+    let message = null;
+    if (attendance.length < 1) {
+      message = "no attendance matches the request.";
+      attendance = null;
+    }
+
+    successResponse(res, 200, message, attendance);
+  } catch (error) {
+    console.error("An error occured while fetching staff attendance:", error);
+    return next(
+      new ErrorResponse(
+        "An error occured while fetching staff attendance. And if it persists, endeavor to contact the dev team.",
+        500
+      )
+    );
+  }
+});
+
+
+[
+  {term:"1", subjects:[{
+    subject: subjectId, 
+    specificSubject: '60d5ec49f1c2f3c4b0e7b1c5', 
+    CA1: 22, // New CA1 value
+    CA2: 19, // New CA2 value
+    Exam: 46, // New Exam value
+    Total: 87 // New Total value
+},{
+    subject: subjectId, 
+    specificSubject: '60d5ec49f1c2f3c4b0e7b1c5', 
+    CA1: 22, // New CA1 value
+    CA2: 19, // New CA2 value
+    Exam: 46, // New Exam value
+    Total: 87 // New Total value
+}]}
+  ,  {term:"2", subjects:[{
+    subject: subjectId, 
+    specificSubject: '60d5ec49f1c2f3c4b0e7b1c5', 
+    CA1: 22, // New CA1 value
+    CA2: 19, // New CA2 value
+    Exam: 46, // New Exam value
+    Total: 87 // New Total value
+},{
+    subject: subjectId, 
+    specificSubject: '60d5ec49f1c2f3c4b0e7b1c5', 
+    CA1: 22, // New CA1 value
+    CA2: 19, // New CA2 value
+    Exam: 46, // New Exam value
+    Total: 87 // New Total value
+}]}
+]
+
+
+{
+    "email": "adexsquare4192@gmail.com",
+    "password": "yzfyn59"
+}
+
+isLinked: false,
+  _id: new ObjectId("662296fc01450859beb75b60"),
+  title: 'Mrs',
+  surName: 'Adenkan',
+  firstName: 'Adebola',
+  maritalStatus: 'married',
+  email: 'adexsquare@outlook.com',
+  phoneNumber: '08020542618',
+  occupation: 'trader',
+  address: {
+    number: 17,
+    street: 'orisun ayo',
+    city: 'Abeokuta',
+    state: 'Ogun state',
+    postalCode: '24242',
+    country: 'Nigeria',
+    _id: new ObjectId("662296fc01450859beb75b61")
+  },
+  gender: 'female',
+  country: 'Nigeria',
+  schoolId: new ObjectId("6622920701450859beb75b26"),
+  type: 'linked',
+  createdAt: 2024-04-19T16:08:28.949Z,
+  updatedAt: 2024-04-19T16:08:28.949Z,
+  __v: 0
+}
