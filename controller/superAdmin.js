@@ -46,7 +46,6 @@ exports.registerSuperAdmin = asyncHandler(async (req, res, next) => {
     const { error } = validateSuperAdmin(req.body);
 
     if (error) {
-      // return res.status(400).json({ success: false, error: error.details });
       return next(new ErrorResponse(error.details[0].message, 400));
     }
 
@@ -68,40 +67,37 @@ exports.registerSuperAdmin = asyncHandler(async (req, res, next) => {
       return next(new ErrorResponse("School email address already exists!", 400));
     }
 
-    // Generate a unique ID
-    const uniqueID = uuidv4();
+    // Generate a random password
+    const randomPassword = Math.random().toString(36).substring(2, 9);
+    console.log("Generated password for new Super Admin:", randomPassword);
 
-    myCache.set(uniqueID, req.body, 30 * 24 * 60 * 60); // 30 days.
+    // Hash the password
+    const hashedPassword = await GeneratePassword(randomPassword);
 
-    console.log("...........uniqueID........... ", uniqueID);
+    // Create the user directly in the database (bypassing email approval)
+    const user = await SuperAdminModel.create({
+      ...req.body,
+      password: hashedPassword,
+    });
 
-    // configure the notifcation system
-    const verifierMail = "ayodejiabdussalam@gmail.com";
-    const message = `A request for school creation has been made.
-    \n\n 
-    The school details - ${JSON.stringify(req.body)} \n\n
-     Click the link:\n\n ${req.protocol}://${req.get(
-      "host"
-    )}/superadmin/acceptApplication/${uniqueID} to accept the request.`;
-    const html = `<p>${message}</p>`;
-
-    // send message
-    const sendMessage = await sendEmail(
-      verifierMail,
-      "School Management System Invite",
-      message,
-      html
-    );
-
-    // if status is false, send error message
-    if (!sendMessage.status) {
-      return next(new ErrorResponse(sendMessage.message, 400));
+    // Try to send email notification, but don't fail if it doesn't work
+    try {
+      const message = `Your account has been created.\n Your password is ${randomPassword} and email is ${user.emailAddress}`;
+      const html = `<p>${message}</p>`;
+      await sendEmail(
+        user.emailAddress,
+        "School Management System - Account Created",
+        message,
+        html
+      );
+    } catch (emailErr) {
+      console.log("Email sending failed, but account was created successfully. Password:", randomPassword);
     }
 
     successResponse(
       res,
       200,
-      "Application successful!, a message will be sent to your email address once your application is accepted."
+      `Registration successful! Your temporary password is: ${randomPassword} — Please save it and use it to login.`
     );
   } catch (err) {
     console.error(err);
@@ -318,32 +314,31 @@ exports.updateProfile = asyncHandler(async (req, res, next) => {
     // Save the updated superadmin
     await superAdmin.save();
 
-    // Configure a notification system
-    const message = `An update has been made in your information.\nThe update details include ${JSON.stringify(
-      req.body
-    )}.\nIf this is not you, please click the below link to revert the changes 👇 and make sure to change your password.\n${
-      req.protocol
-    }://${req.get("host")}/superadmin/revert?email=${superAdmin.emailAddress}`;
-    const html = `<p>${message}</p>`;
+    // Try to send notification email, but don't fail the update if it doesn't work
+    let successMessage = "Information updated successfully!";
+    try {
+      const message = `An update has been made in your information.\nThe update details include ${JSON.stringify(
+        req.body
+      )}.\nIf this is not you, please click the below link to revert the changes 👇 and make sure to change your password.\n${
+        req.protocol
+      }://${req.get("host")}/superadmin/revert?email=${superAdmin.emailAddress}`;
+      const html = `<p>${message}</p>`;
 
-    // Send a notification email
-    const sendMessage = await sendEmail(
-      superAdmin.emailAddress,
-      "Basitech SMS - Notification on Information Update.",
-      message,
-      html
-    );
+      const sendMessage = await sendEmail(
+        superAdmin.emailAddress,
+        "Basitech SMS - Notification on Information Update.",
+        message,
+        html
+      );
 
-    // Handle the email sending result
-    const successMessage = sendMessage.status
-      ? "A message has been sent to your email address. Please check it out."
-      : "Error occurred while notifying you";
+      if (sendMessage.status) {
+        successMessage += " A notification email has been sent.";
+      }
+    } catch (emailErr) {
+      console.log("Email notification failed, but update was saved successfully.");
+    }
 
-    successResponse(
-      res,
-      200,
-      `Information updated successfully!. ${successMessage}`
-    );
+    successResponse(res, 200, successMessage);
   } catch (err) {
     console.error(err);
     next(err);
