@@ -66,22 +66,27 @@ exports.createSession = asyncHandler(async (req, res, next) => {
       });
     }
 
-    // Send notification to the school's email address
-    const school = await SuperAdminModel.findById(schoolId);
-    const message = `You have successfully created session (${newSession.sessionName}) at ${school.schoolName}!`;
-    const html = `<p>${message}</p>`;
-    const title = `Session creation at ${school.schoolName}`;
+    // Send notification (don't fail session creation if email fails)
+    let additionalMessage = "";
+    try {
+      const school = await SuperAdminModel.findById(schoolId);
+      const message = `You have successfully created session (${newSession.sessionName}) at ${school.schoolName}!`;
+      const html = `<p>${message}</p>`;
+      const title = `Session creation at ${school.schoolName}`;
 
-    const sendMessage = await sendNotificationFallback(
-      school.emailAddress,
-      title,
-      message,
-      html
-    );
+      const sendMessage = await sendNotificationFallback(
+        school.emailAddress,
+        title,
+        message,
+        html
+      );
 
-    let additionalMessage = sendMessage
-      ? ""
-      : "but notification wasn't sent successfully to the school's email address.";
+      if (!sendMessage) {
+        additionalMessage = "but notification wasn't sent successfully.";
+      }
+    } catch (emailErr) {
+      console.log("Email notification failed, but session was created successfully.");
+    }
 
     const successMessage = `Session created successfully! ${additionalMessage}`;
     successResponse(res, 201, successMessage, newSession );
