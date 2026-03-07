@@ -49,7 +49,7 @@ exports.createClass = asyncHandler(async (req, res, next) => {
     }
 
 
-    successResponse(res, 201, "Class Level created successfully!", newClassLeve);
+    successResponse(res, 201, "Class Level created successfully!", newClassLevel);
   } catch (error) {
     console.error("Error creating class:", error);
     next(error);
@@ -462,29 +462,31 @@ exports.assignTeacherToClass = asyncHandler(async (req, res, next) => {
     await classArm.save();
 
     // ------------------ notify the staff
-    const school = await SuperAdminModel.findById(schoolId);
-    const classLevel = await classLevelModel.findById(classArm.classLevelId);
-    const message = `Congratulations! You have been assigned the class teacher of a "${classLevel.levelName} ${classArm.armName}" in "${school.schoolName}". Please visit your dashboard to view it.`;
-    const html = `<p>${message}</p>`;
-    const title = `Assignment To "${classLevel.levelName} ${classArm.armName}" at "${school.schoolName}"`;
+    let additionalMessage = "";
+    try {
+      const school = await SuperAdminModel.findById(schoolId);
+      const classLevel = await classLevelModel.findById(classArm.classLevelId);
+      const message = `Congratulations! You have been assigned the class teacher of a "${classLevel.levelName} ${classArm.armName}" in "${school.schoolName}". Please visit your dashboard to view it.`;
+      const html = `<p>${message}</p>`;
+      const title = `Assignment To "${classLevel.levelName} ${classArm.armName}" at "${school.schoolName}"`;
 
-    // process message
-    const sendMessage = await sendNotificationFallback(
-      staff.emailAddress,
-      title,
-      message,
-      html
-    );
+      const sendMessage = await sendNotificationFallback(
+        staff.emailAddress,
+        title,
+        message,
+        html
+      );
 
-    // result message
-    let additionalMessage = sendMessage ? "" : "but notification wasn't sent successfully to the staff's email address. Please help send it manually."
+      if (!sendMessage) {
+        additionalMessage = "but notification wasn't sent successfully.";
+      }
+    } catch (emailErr) {
+      console.log("Email notification failed, but teacher was assigned successfully.");
+    }
     // --------------------------------------
 
-    // successMessage
-    const successMessage = `Teacher "${staff.firstName} ${staff.surname}" has been assigned to class arm "${classLevel.levelName} ${classArm.armName}" successfully!. ${additionalMessage}`;
-
-    // send response and data
-    successResponse(res, 200, successMessage, null);
+    // send response
+    successResponse(res, 200, `Teacher assigned successfully! ${additionalMessage}`, null);
   }catch(e){
     console.error("error assigning teacher to a class arm", e);
     next(e);

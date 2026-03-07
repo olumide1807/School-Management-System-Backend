@@ -107,4 +107,8 @@ app.use(errorHandler);
 PORT = process.env.PORT;
 app.listen(5002, () => {
   console.log(`server is on ${PORT} `);
+
+  // Start the session/term auto-activation scheduler
+  const { startScheduler } = require("./utils/sessionScheduler");
+  startScheduler();
 });

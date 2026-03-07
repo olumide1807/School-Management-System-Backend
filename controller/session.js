@@ -213,34 +213,119 @@ exports.editTerm = asyncHandler(async (req, res, next) => {
 
 exports.getCurrentSession = asyncHandler(async (req, res, next) => {
   try {
-    // extract schoolId from req.user
-    const {id} = req.params
     const schoolId = req.user.schoolName ? req.user.id : req.user.schoolId;
+    const now = new Date();
 
-    // find current session
+    // find current active session
     const session = await sessionModel.findOne({
       schoolId,
       currentSession: true,
     });
 
-   if(!session) {
-     return next(new ErrorResponse("No current session!", 404));
-   }
+    // If there's an active session
+    if (session) {
+      // find current active term in the session
+      const term = await termModel.findOne({
+        sessionId: session.id,
+        currentTerm: true,
+      });
 
-    // find current term in the session
-    const term = await termModel.findOne({
-      sessionId: session.id,
-      currentTerm: true,
-    });
+      if (term) {
+        // Active session + active term
+        const data = { session, term, status: "active" };
+        return successResponse(res, 200, null, data);
+      }
 
-    const data = {
-      session,
-      term
-    };
+      // Active session but no active term — it's a holiday between terms
+      // Find the next upcoming term in this session
+      const allTerms = await termModel
+        .find({ sessionId: session.id, schoolId })
+        .sort({ termName: 1 });
 
-    // send response
-    successResponse(res, 200, null, data);
-  } catch(error) {
+      const nextTerm = allTerms.find(
+        (t) => t.termStartDate && new Date(t.termStartDate) > now && !t.currentTerm
+      );
+
+      if (nextTerm) {
+        // Holiday between terms
+        const data = {
+          session,
+          term: null,
+          status: "holiday",
+          holidayType: "between_terms",
+          nextTerm: {
+            termName: nextTerm.termName,
+            startDate: nextTerm.termStartDate,
+          },
+        };
+        return successResponse(res, 200, null, data);
+      }
+
+      // All terms in this session have passed — session is ending
+      // Check for next session
+      const nextSession = await sessionModel.findOne({
+        schoolId,
+        currentSession: false,
+        _id: { $ne: session._id },
+      }).sort({ sessionName: 1 });
+
+      if (nextSession) {
+        const nextSessionTerm1 = await termModel.findOne({
+          sessionId: nextSession._id,
+          schoolId,
+          termName: "Term 1",
+        });
+
+        const data = {
+          session,
+          term: null,
+          status: "holiday",
+          holidayType: "between_sessions",
+          nextSession: {
+            sessionName: nextSession.sessionName,
+            term1StartDate: nextSessionTerm1?.termStartDate || null,
+          },
+        };
+        return successResponse(res, 200, null, data);
+      }
+
+      // No next session exists
+      const data = {
+        session,
+        term: null,
+        status: "holiday",
+        holidayType: "no_next_session",
+      };
+      return successResponse(res, 200, null, data);
+    }
+
+    // No active session at all — check if there's any upcoming session
+    const upcomingSession = await sessionModel.findOne({ schoolId }).sort({ sessionName: 1 });
+
+    if (upcomingSession) {
+      const term1 = await termModel.findOne({
+        sessionId: upcomingSession._id,
+        schoolId,
+        termName: "Term 1",
+      });
+
+      if (term1 && term1.termStartDate && new Date(term1.termStartDate) > now) {
+        const data = {
+          session: null,
+          term: null,
+          status: "holiday",
+          holidayType: "awaiting_session",
+          nextSession: {
+            sessionName: upcomingSession.sessionName,
+            term1StartDate: term1.termStartDate,
+          },
+        };
+        return successResponse(res, 200, null, data);
+      }
+    }
+
+    return next(new ErrorResponse("No current session!", 404));
+  } catch (error) {
     console.error("An error occurred while getting current session and term", error);
     next(error);
   }
