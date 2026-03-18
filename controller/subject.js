@@ -2,6 +2,7 @@ const ErrorResponse = require("../utils/errorResponse");
 const { successResponse } = require("../utils/successResponse");
 const { isValidMongoId } = require("../utils/isValidMongoObjectId");
 const { asyncHandler } = require("../middleware");
+const mongoose = require("mongoose");
 const {
   SubjectModel,
   specificSubjectModel,
@@ -434,18 +435,32 @@ exports.deleteSubject = asyncHandler(async (req, res, next) => {
     }
 
     if (req.query.find === "specificSubject") {
-      await deleteSubjectById(specificSubjectModel);
+      // Get the specific subject data BEFORE deleting
+      const specificSubject = await specificSubjectModel.findById(id);
+      
+      if (!specificSubject) {
+        return next(new ErrorResponse("specificSubject does not exist!", 404));
+      }
 
-      const subject = await specificSubjectModel.findById(id);
-      const classArm = await classArmModel.findById(subject.classArmId);
+      const classArmId = specificSubject.classArmId;
 
-      const count = await specificSubjectModel.countDocuments({
-        classArmId: classArm.id,
-        schoolId,
-      });
+      // Now delete it
+      await specificSubjectModel.findByIdAndDelete(id);
 
-      classArm.numberOfSubjects = count;
-      await classArm.save();
+      // Update the class arm's subject count
+      try {
+        const classArm = await classArmModel.findById(classArmId);
+        if (classArm) {
+          const count = await specificSubjectModel.countDocuments({
+            classArmId: classArm.id,
+            schoolId,
+          });
+          classArm.numberOfSubjects = count;
+          await classArm.save();
+        }
+      } catch (countErr) {
+        console.log("Error updating subject count, but delete was successful");
+      }
 
       return res.status(200).json({
         success: true,

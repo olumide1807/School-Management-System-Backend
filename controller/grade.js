@@ -40,19 +40,17 @@ exports.createGrade = asyncHandler(async (req, res, next) => {
             ...body
         });
 
-        // notify the school about the grade system creation
-        const school = await SuperAdminModel.findById(schoolId);
-        const recipient = school.emailAddress;
-        const message = `You have successfully created a new grade system for your organization. Kindly review it!`;
-        const html = `<p>${message}</p>`;
-        const title = `Successful Creation of Grade System on SMS`;
-
-        const sendMessage = await sendNotificationFallback(
-            recipient,
-            title,
-            message,
-            html
-        );
+        // notify the school (don't fail if email fails)
+        try {
+            const school = await SuperAdminModel.findById(schoolId);
+            const recipient = school.emailAddress;
+            const message = `You have successfully created a new grade system for your organization. Kindly review it!`;
+            const html = `<p>${message}</p>`;
+            const title = `Successful Creation of Grade System on SMS`;
+            await sendNotificationFallback(recipient, title, message, html);
+        } catch (emailErr) {
+            console.log("Email notification failed, but grade was created successfully.");
+        }
 
         const successMessage = `New Grade System successfully created!`;
 
@@ -65,6 +63,35 @@ exports.createGrade = asyncHandler(async (req, res, next) => {
     }
 })
 
+
+exports.getAllGrades = asyncHandler(async (req, res, next) => {
+    try {
+        const schoolId = req.user.schoolName ? req.user.id : req.user.schoolId;
+        const grades = await gradeModel.find({ schoolId });
+        successResponse(res, 200, null, grades);
+    } catch (e) {
+        console.error("Error getting all grades!", e);
+        next(e);
+    }
+})
+
+exports.deleteGrade = asyncHandler(async (req, res, next) => {
+    try {
+        const schoolId = req.user.schoolName ? req.user.id : req.user.schoolId;
+        const { id } = req.params;
+        if (!isValidMongoId(id)) {
+            return next(new ErrorResponse("Invalid Id provided!", 400));
+        }
+        const grade = await gradeModel.findOneAndDelete({ _id: id, schoolId });
+        if (!grade) {
+            return next(new ErrorResponse("Grade system not found!", 404));
+        }
+        successResponse(res, 200, "Grade system deleted successfully!", null);
+    } catch (e) {
+        console.error("Error deleting grade!", e);
+        next(e);
+    }
+})
 
 exports.getGradeById = asyncHandler(async (req, res, next) => {
     try{

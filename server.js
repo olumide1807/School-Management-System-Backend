@@ -58,6 +58,7 @@ const inventoryRouter = require("./route/inventory");
 const feeRouter = require("./route/fee.js");
 const resultRouter = require('./route/result.js')
 const assessmentRouter = require("./route/assessment.js");
+const timetableGridRouter = require("./route/timetableGrid.js");
 
 // middlewares
 app.use(Treblle({
@@ -91,6 +92,7 @@ app.use("/inventory", inventoryRouter);
 app.use("/fee", feeRouter);
 app.use('/result',resultRouter)
 app.use("/assessment", assessmentRouter);
+app.use("/timetable-grid", timetableGridRouter);
 
 
 // debug route

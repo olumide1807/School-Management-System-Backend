@@ -17,5 +17,7 @@ module.exports = {
     termModel: require("./term"),
     feeModel: require("./fee"),
     resultModel: require('./result'),
-    assessmentModel: require("./assessment")
+    assessmentModel: require("./assessment"),
+    periodSettingsModel: require("./periodSettings"),
+    timetableGridModel: require("./timetableGrid"),
 }
