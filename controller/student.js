@@ -47,6 +47,17 @@ exports.registerStudent = asyncHandler(async (req, res, next) => {
       stateOfOrigin,
       localGovernmentArea,
       address,
+      // New fields
+      bloodGroup,
+      religion,
+      nationality,
+      previousSchool,
+      lastClassAttended,
+      reasonForLeaving,
+      admissionDate,
+      medicalInfo,
+      emergencyContact,
+      // Parent fields
       parentID,
       relationship,
       parentTitle,
@@ -103,13 +114,16 @@ exports.registerStudent = asyncHandler(async (req, res, next) => {
       );
     }
 
-    // check if file is uploaded
-    if (!file) {
-      return next(new ErrorResponse("Please upload a photo", 400));
+    // handle photo upload (optional)
+    let photoUrl = null;
+    if (file) {
+      try {
+        const result = await cloudinary.uploader.upload(file.path);
+        photoUrl = result.secure_url;
+      } catch (uploadErr) {
+        console.log("Photo upload failed, continuing without photo");
+      }
     }
-
-    // save image to cloudinary and get the url
-    const result = await cloudinary.uploader.upload(file.path);
 
     let object = {
       studentID: studentId,
@@ -128,12 +142,40 @@ exports.registerStudent = asyncHandler(async (req, res, next) => {
       password: studentId,
       schoolId,
       guardians: [],
-      photo:result.secure_url
+      photo: photoUrl,
+      // New fields
+      bloodGroup: bloodGroup || null,
+      religion: religion || null,
+      nationality: nationality || "Nigerian",
+      previousSchool: previousSchool || null,
+      lastClassAttended: lastClassAttended || null,
+      reasonForLeaving: reasonForLeaving || null,
+      admissionDate: admissionDate || new Date(),
+      medicalInfo: medicalInfo || {},
+      emergencyContact: emergencyContact || {},
     };
 
-    let parentId;
+    let parentId = null;
 
-    if (!parentID || parentID.trim() === "") {
+    // Only process parent if parentID or parent details are provided
+    if (parentID && parentID.trim() !== "") {
+      parentId = parentID;
+
+      object = await linkParent(
+        parentId,
+        schoolId,
+        relationship,
+        object
+      );
+  
+      if (!object) {
+        return next(
+          new ErrorResponse(
+            "Parent doesn't exist. Therefore you can't link it to the student"
+          )
+        );
+      }
+    } else if (parentFirstName && parentSurName && parentEmail) {
       const requiredFields = [
         { field: "parent title", value: parentTitle },
         { field: "parent first name", value: parentFirstName },
@@ -181,7 +223,7 @@ exports.registerStudent = asyncHandler(async (req, res, next) => {
       if (!parent) {
         return next(
           new ErrorResponse(
-            `parent with email address: ${parentEmail} already exists in the school. therefore you can't create a new one.`
+            `parent with email address: ${parentEmail} already exists in the school.`
           )
         );
       }
@@ -192,24 +234,8 @@ exports.registerStudent = asyncHandler(async (req, res, next) => {
         parentId,
         relationship
       })
-    } else {
-      parentId = parentID;
-
-      object = await linkParent(
-        parentId,
-        schoolId,
-        relationship,
-        object
-      );
-  
-      if (!object) {
-        return next(
-          new ErrorResponse(
-            "Parent doesn't exist. Therefore you can't link it to the student"
-          )
-        );
-      }
     }
+    // If no parent info provided, student is created without a guardian
 
     const newStudent = new studentModel(object);
 

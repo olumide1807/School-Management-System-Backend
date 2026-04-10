@@ -20,4 +20,5 @@ module.exports = {
     assessmentModel: require("./assessment"),
     periodSettingsModel: require("./periodSettings"),
     timetableGridModel: require("./timetableGrid"),
+    paymentModel: require("./payment"),
 }

@@ -15,81 +15,59 @@ const studentSchema = new mongoose.Schema({
         required: true,
         unique: true
     },
-    firstName: {
-        type: String,
-        required: true
-    },
-    surName: {
-        type: String,
-        required: true
-    },
-    otherName: {
-        type: String,
-    },
-    email: {
-        type: String,
-    },
-    classArmId: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'ClassArm',
-        required: true
-    },
-    gender: {
-        type: String,
-        enum: ['male', 'female', 'other'],
-        required: true
-    },
-    dateOfBirth: {
-        type: Date,
-        required: true
-    },
-    phoneNumber: {
-        type: String
-    },
-    country: {
-        type: String,
-        required: true
-    },
-    photo: String, // You can store the photo URL or file path here
-    guardians: [
-        {
-            parentId: {type: mongoose.Schema.Types.ObjectId, ref: "Parent"},
-            relationship: {
-                type: String
-            }
-        }
-    ],
+    // ===== PERSONAL INFO =====
+    firstName: { type: String, required: true },
+    surName: { type: String, required: true },
+    otherName: String,
+    email: String,
+    gender: { type: String, enum: ['male', 'female', 'other'], required: true },
+    dateOfBirth: { type: Date, required: true },
+    photo: String,
     bloodGroup: String,
-    stateOfOrigin: {
-        type: String,
-        required: true
+    religion: String,
+    nationality: { type: String, default: "Nigerian" },
+
+    // ===== CONTACT INFO =====
+    phoneNumber: String,
+    country: { type: String, required: true },
+    stateOfOrigin: { type: String, required: true },
+    localGovernmentArea: { type: String, required: true },
+    address: { type: addressSchema, required: true },
+
+    // ===== ACADEMIC INFO =====
+    classArmId: { type: mongoose.Schema.Types.ObjectId, ref: 'ClassArm', required: true },
+    admissionDate: { type: Date, default: Date.now },
+    previousSchool: String,
+    lastClassAttended: String,
+    reasonForLeaving: String,
+
+    // ===== PARENT/GUARDIAN =====
+    guardians: [{
+        parentId: { type: mongoose.Schema.Types.ObjectId, ref: "Parent" },
+        relationship: String
+    }],
+
+    // ===== MEDICAL INFO =====
+    medicalInfo: {
+        allergies: String,
+        disabilities: String,
+        medicalConditions: String,
     },
-    localGovernmentArea: {
-        type: String,
-        required: true
+
+    // ===== EMERGENCY CONTACT =====
+    emergencyContact: {
+        name: String,
+        phone: String,
+        relationship: String,
     },
-    address: {
-        type: addressSchema,
-        required: true
-    },
-    password: {
-        type: String,
-        required: true
-    },
-    status: {
-        type: "String",
-        enum: ["active", "deactivated"],
-        required: true,
-        default: "active"
-    },
-    schoolId: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "SuperAdmin"
-    },
+
+    // ===== SYSTEM =====
+    password: { type: String, required: true },
+    status: { type: String, enum: ["active", "deactivated"], required: true, default: "active" },
+    schoolId: { type: mongoose.Schema.Types.ObjectId, ref: "SuperAdmin" },
     resetPasswordToken: String,
     resetPasswordExpire: Date,
-}, {timestamps: true});
+}, { timestamps: true });
 
 const Student = mongoose.model('Student', studentSchema);
-
 module.exports = Student;

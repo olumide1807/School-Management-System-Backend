@@ -36,7 +36,7 @@ Sentry.init({
 // Define a rate limiter middleware
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 500, // limit each IP to 500 requests per windowMs (increased for local dev)
+  max: 500, // limit each IP to 50 requests per windowMs
   message: "Too many requests from this IP, please try again later.",
 });
 
@@ -59,6 +59,7 @@ const feeRouter = require("./route/fee.js");
 const resultRouter = require('./route/result.js')
 const assessmentRouter = require("./route/assessment.js");
 const timetableGridRouter = require("./route/timetableGrid.js");
+const paymentRouter = require("./route/payment.js");
 
 // middlewares
 app.use(Treblle({
@@ -93,6 +94,7 @@ app.use("/fee", feeRouter);
 app.use('/result',resultRouter)
 app.use("/assessment", assessmentRouter);
 app.use("/timetable-grid", timetableGridRouter);
+app.use("/payment", paymentRouter);
 
 
 // debug route
@@ -109,8 +111,4 @@ app.use(errorHandler);
 PORT = process.env.PORT;
 app.listen(5002, () => {
   console.log(`server is on ${PORT} `);
-
-  // Start the session/term auto-activation scheduler
-  const { startScheduler } = require("./utils/sessionScheduler");
-  startScheduler();
 });

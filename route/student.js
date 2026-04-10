@@ -20,8 +20,8 @@ router.get('/attendance', multipleProtect(["super admin", "staff", "admin"]), ge
 // get a particular student attendance
 router.get('/attendance/:id', multipleProtect(["super admin", "staff", "admin"]), getStudentAttendance);
 
-// register student
-router.post("/register", multipleProtect(["super admin", "admin"]),upload.single("file"), isFile, registerStudent);
+// register student (file upload optional)
+router.post("/register", multipleProtect(["super admin", "admin"]), upload.single("file"), registerStudent);
 
 // create student attendance
 router.post("/attendance", multipleProtect(["super admin", "staff"]), createAttendance);
