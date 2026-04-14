@@ -2,32 +2,52 @@ const { sessionModel, termModel } = require("../models");
 
 /**
  * Session & Term Auto-Activation Scheduler
- * 
- * Runs every hour and checks all schools:
- * 
- * 1. TERM TRANSITION: If the current term's end date has passed,
- *    deactivate it and activate the next term (by term name order).
- * 
- * 2. SESSION END: If all 3 terms in the current session have ended
- *    (no more terms to activate), deactivate the session.
- * 
- * 3. SESSION ACTIVATION: If no session is currently active for a school,
- *    check if any session has a Term 1 whose start date has arrived.
- *    If so, activate that session and its Term 1.
+ *
+ * Runs every hour for all schools and does the following:
+ *
+ * For each school:
+ * 1. Find the term where today falls between termStartDate and termEndDate
+ *    (termEndDate is treated as END OF DAY)
+ *    → activate that term AND its session
+ * 2. If no term matches today (holiday), mark all terms inactive
+ * 3. Make sure only ONE term is active per session at any time
+ * 4. Make sure only ONE session is active per school at any time
+ *
+ * This is completely date-driven — it doesn't rely on any existing flags.
  */
 
-const TERM_ORDER = ["Term 1", "Term 2", "Term 3"];
+/**
+ * Get start of day (00:00:00) for a date
+ */
+function startOfDay(date) {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+/**
+ * Get end of day (23:59:59.999) for a date
+ */
+function endOfDay(date) {
+  const d = new Date(date);
+  d.setHours(23, 59, 59, 999);
+  return d;
+}
 
 async function checkAndUpdateSessionsAndTerms() {
   const now = new Date();
   console.log(`[Scheduler] Running session/term check at ${now.toISOString()}`);
 
   try {
-    // Get all schools that have sessions
     const allSessions = await sessionModel.find({});
-    
-    // Group sessions by schoolId
-    const schoolIds = [...new Set(allSessions.map(s => s.schoolId.toString()))];
+
+    if (allSessions.length === 0) {
+      console.log("[Scheduler] No sessions found in the database");
+      return;
+    }
+
+    const schoolIds = [...new Set(allSessions.map((s) => s.schoolId.toString()))];
+    console.log(`[Scheduler] Found ${schoolIds.length} school(s) with sessions`);
 
     for (const schoolId of schoolIds) {
       await processSchool(schoolId, now);
@@ -39,142 +59,128 @@ async function checkAndUpdateSessionsAndTerms() {
 
 async function processSchool(schoolId, now) {
   try {
-    // Find the current active session for this school
-    const currentSession = await sessionModel.findOne({
-      schoolId,
-      currentSession: true,
+    const allTerms = await termModel.find({ schoolId });
+    console.log(`[Scheduler] School ${schoolId}: found ${allTerms.length} terms`);
+
+    if (allTerms.length === 0) return;
+
+    // Find the term where today falls between termStartDate (start of day)
+    // and termEndDate (end of day, inclusive)
+    const activeTerm = allTerms.find((t) => {
+      if (!t.termStartDate || !t.termEndDate) return false;
+      const s = startOfDay(t.termStartDate);
+      const e = endOfDay(t.termEndDate);
+      return s <= now && now <= e;
     });
 
-    if (currentSession) {
-      await handleActiveSession(currentSession, schoolId, now);
+    if (activeTerm) {
+      console.log(
+        `[Scheduler] Found active term by date: "${activeTerm.termName}" (${activeTerm._id})`
+      );
+
+      // Deactivate all OTHER terms in the school
+      await termModel.updateMany(
+        { schoolId, _id: { $ne: activeTerm._id } },
+        { currentTerm: false }
+      );
+
+      // Activate this term
+      if (!activeTerm.currentTerm) {
+        activeTerm.currentTerm = true;
+        await activeTerm.save();
+        console.log(`[Scheduler] ✓ Activated term "${activeTerm.termName}"`);
+      } else {
+        console.log(`[Scheduler] Term "${activeTerm.termName}" was already active`);
+      }
+
+      // Activate the session this term belongs to
+      const session = await sessionModel.findById(activeTerm.sessionId);
+      if (session) {
+        await sessionModel.updateMany(
+          { schoolId, _id: { $ne: session._id } },
+          { currentSession: false }
+        );
+
+        if (!session.currentSession) {
+          session.currentSession = true;
+          await session.save();
+          console.log(`[Scheduler] ✓ Activated session "${session.sessionName}"`);
+        } else {
+          console.log(`[Scheduler] Session "${session.sessionName}" was already active`);
+        }
+      }
     } else {
-      // No active session — check if a new one should be activated
-      await handleNoActiveSession(schoolId, now);
+      // No active term — we're on holiday
+      console.log(`[Scheduler] No active term for today (school is on holiday)`);
+
+      // Deactivate all terms
+      await termModel.updateMany({ schoolId, currentTerm: true }, { currentTerm: false });
+
+      // Find the session whose overall range includes today (between-terms holiday)
+      const sessions = await sessionModel.find({ schoolId });
+
+      let bestSessionId = null;
+
+      for (const session of sessions) {
+        const sessionTerms = allTerms.filter(
+          (t) => t.sessionId.toString() === session._id.toString()
+        );
+        if (sessionTerms.length === 0) continue;
+
+        const sorted = sessionTerms
+          .filter((t) => t.termStartDate && t.termEndDate)
+          .sort((a, b) => new Date(a.termStartDate) - new Date(b.termStartDate));
+
+        if (sorted.length === 0) continue;
+
+        const sessionStart = startOfDay(sorted[0].termStartDate);
+        const sessionEnd = endOfDay(sorted[sorted.length - 1].termEndDate);
+
+        if (sessionStart <= now && now <= sessionEnd) {
+          bestSessionId = session._id;
+          break;
+        }
+      }
+
+      if (bestSessionId) {
+        await sessionModel.updateMany(
+          { schoolId, _id: { $ne: bestSessionId } },
+          { currentSession: false }
+        );
+        const bestSession = await sessionModel.findById(bestSessionId);
+        if (bestSession && !bestSession.currentSession) {
+          bestSession.currentSession = true;
+          await bestSession.save();
+          console.log(
+            `[Scheduler] Kept session "${bestSession.sessionName}" active (between-terms holiday)`
+          );
+        }
+      } else {
+        await sessionModel.updateMany(
+          { schoolId, currentSession: true },
+          { currentSession: false }
+        );
+        console.log(`[Scheduler] Deactivated all sessions (between sessions or no session today)`);
+      }
     }
   } catch (error) {
     console.error(`[Scheduler] Error processing school ${schoolId}:`, error);
   }
 }
 
-async function handleActiveSession(currentSession, schoolId, now) {
-  // Get all terms for this session, sorted by term name
-  const terms = await termModel
-    .find({ sessionId: currentSession._id, schoolId })
-    .sort({ termName: 1 });
-
-  if (terms.length === 0) return;
-
-  // Find the current active term
-  const activeTerm = terms.find(t => t.currentTerm === true);
-
-  if (activeTerm) {
-    // Check if the active term's end date has passed
-    if (activeTerm.termEndDate && now > new Date(activeTerm.termEndDate)) {
-      console.log(`[Scheduler] Term "${activeTerm.termName}" has ended for session "${currentSession.sessionName}"`);
-
-      // Deactivate current term
-      activeTerm.currentTerm = false;
-      await activeTerm.save();
-
-      // Find the next term in order
-      const currentIndex = TERM_ORDER.indexOf(activeTerm.termName);
-      const nextTermName = TERM_ORDER[currentIndex + 1];
-
-      if (nextTermName) {
-        const nextTerm = terms.find(t => t.termName === nextTermName);
-        if (nextTerm) {
-          // Check if the next term's start date has arrived
-          if (!nextTerm.termStartDate || now >= new Date(nextTerm.termStartDate)) {
-            nextTerm.currentTerm = true;
-            await nextTerm.save();
-            console.log(`[Scheduler] Activated "${nextTerm.termName}" for session "${currentSession.sessionName}"`);
-          } else {
-            console.log(`[Scheduler] Next term "${nextTerm.termName}" start date hasn't arrived yet (${nextTerm.termStartDate})`);
-          }
-        }
-      } else {
-        // No more terms — this was the last term (Term 3)
-        // Deactivate the session
-        currentSession.currentSession = false;
-        await currentSession.save();
-        console.log(`[Scheduler] Session "${currentSession.sessionName}" has ended (all terms completed). Deactivated.`);
-
-        // Try to activate the next session
-        await handleNoActiveSession(schoolId, now);
-      }
-    }
-  } else {
-    // Session is active but no term is active — try to activate the first term whose date has arrived
-    for (const termName of TERM_ORDER) {
-      const term = terms.find(t => t.termName === termName);
-      if (term && term.termStartDate && now >= new Date(term.termStartDate)) {
-        // Check the term hasn't already ended
-        if (!term.termEndDate || now <= new Date(term.termEndDate)) {
-          term.currentTerm = true;
-          await term.save();
-          console.log(`[Scheduler] Activated "${term.termName}" for session "${currentSession.sessionName}" (no active term found)`);
-          break;
-        }
-      }
-    }
-  }
-}
-
-async function handleNoActiveSession(schoolId, now) {
-  // Find all sessions for this school that are not active, sorted by sessionName
-  const inactiveSessions = await sessionModel
-    .find({ schoolId, currentSession: false })
-    .sort({ sessionName: 1 });
-
-  for (const session of inactiveSessions) {
-    // Get Term 1 for this session
-    const term1 = await termModel.findOne({
-      sessionId: session._id,
-      schoolId,
-      termName: "Term 1",
-    });
-
-    if (term1 && term1.termStartDate && now >= new Date(term1.termStartDate)) {
-      // Check if Term 1 hasn't already ended (don't activate a session that's fully in the past)
-      const allTerms = await termModel.find({ sessionId: session._id, schoolId });
-      const lastTerm = allTerms
-        .filter(t => t.termEndDate)
-        .sort((a, b) => new Date(b.termEndDate) - new Date(a.termEndDate))[0];
-
-      // If the last term's end date is in the future (or no end date set), activate this session
-      if (!lastTerm || !lastTerm.termEndDate || now <= new Date(lastTerm.termEndDate)) {
-        // Activate the session
-        session.currentSession = true;
-        await session.save();
-        console.log(`[Scheduler] Activated session "${session.sessionName}" — Term 1 start date has arrived.`);
-
-        // Activate Term 1
-        term1.currentTerm = true;
-        await term1.save();
-        console.log(`[Scheduler] Activated "Term 1" for session "${session.sessionName}"`);
-        
-        break; // Only activate one session
-      }
-    }
-  }
-}
-
 /**
- * Start the scheduler
- * Runs every hour (3600000ms)
- * Also runs once immediately on server start
+ * Start the scheduler.
+ * Runs once on startup (after a 5-second delay) and then every hour.
  */
 function startScheduler() {
   const ONE_HOUR = 60 * 60 * 1000;
 
   console.log("[Scheduler] Session/Term auto-activation scheduler started (runs every hour)");
 
-  // Run once on startup (with a small delay to ensure DB is connected)
   setTimeout(() => {
     checkAndUpdateSessionsAndTerms();
   }, 5000);
 
-  // Then run every hour
   setInterval(() => {
     checkAndUpdateSessionsAndTerms();
   }, ONE_HOUR);

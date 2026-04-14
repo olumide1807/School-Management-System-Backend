@@ -10,6 +10,9 @@ const cors = require("cors");
 const Sentry = require("@sentry/node");
 const Treblle = require("@treblle/express");
 
+// Session/term auto-activation scheduler
+const { startScheduler } = require("./utils/sessionScheduler");
+
 // Load env vars
 dotenv.config({ path: "./config/config.env" });
 
@@ -36,7 +39,7 @@ Sentry.init({
 // Define a rate limiter middleware
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 500, // limit each IP to 50 requests per windowMs
+  max: 500, // limit each IP to 500 requests per windowMs
   message: "Too many requests from this IP, please try again later.",
 });
 
@@ -111,4 +114,7 @@ app.use(errorHandler);
 PORT = process.env.PORT;
 app.listen(5002, () => {
   console.log(`server is on ${PORT} `);
+  // Start the session/term auto-activation scheduler
+  // Runs once on startup (after 5s delay) and then every hour
+  startScheduler();
 });
