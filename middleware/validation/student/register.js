@@ -56,7 +56,7 @@ const schema = Joi.object({
         street: Joi.string(),
         city: Joi.string(),
         state: Joi.string(),
-        postalCode: Joi.string(),
+        postalCode: Joi.string().allow('', null),
         country: Joi.string()
     }).allow(null),
 });

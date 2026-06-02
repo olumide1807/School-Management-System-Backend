@@ -21,4 +21,6 @@ module.exports = {
     periodSettingsModel: require("./periodSettings"),
     timetableGridModel: require("./timetableGrid"),
     paymentModel: require("./payment"),
+    inventoryModel: require("./inventory"),
+    stockMovementModel: require("./stockMovement"),
 }

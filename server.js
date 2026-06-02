@@ -63,6 +63,7 @@ const resultRouter = require('./route/result.js')
 const assessmentRouter = require("./route/assessment.js");
 const timetableGridRouter = require("./route/timetableGrid.js");
 const paymentRouter = require("./route/payment.js");
+const attendanceRouter = require("./route/attendance");
 
 // middlewares
 app.use(Treblle({
@@ -98,6 +99,7 @@ app.use('/result',resultRouter)
 app.use("/assessment", assessmentRouter);
 app.use("/timetable-grid", timetableGridRouter);
 app.use("/payment", paymentRouter);
+app.use("/attendance", attendanceRouter);
 
 
 // debug route

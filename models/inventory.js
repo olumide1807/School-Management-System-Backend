@@ -1,4 +1,4 @@
-const mongoose = require('mongoose')
+const mongoose = require('mongoose');
 
 const inventorySchema = new mongoose.Schema({
     schoolId: {
@@ -8,23 +8,57 @@ const inventorySchema = new mongoose.Schema({
     },
     name: {
         type: String,
-        required: true
+        required: true,
+        trim: true
+    },
+    category: {
+        type: String,
+        trim: true,
+        default: ""
+    },
+    description: {
+        type: String,
+        trim: true,
+        default: ""
     },
     quantity: {
-        type: Number
+        type: Number,
+        required: true,
+        min: 0,
+        default: 0
+    },
+    minQuantity: {
+        type: Number,
+        min: 0,
+        default: 0
     },
     price: {
-        type: Number
+        type: Number,
+        required: true,
+        min: 0
     },
-    dateBought:{
+    supplier: {
+        type: String,
+        trim: true,
+        default: ""
+    },
+    dateBought: {
         type: Date
     },
-    createdAt: {
+    isDeleted: {
+        type: Boolean,
+        default: false
+    },
+    deletedAt: {
         type: Date,
-        default: Date.now
+        default: null
     }
-})
+}, { timestamps: true });
 
-const inventoryModel = mongoose.model("inventory", inventorySchema)
+// Prevent duplicate active items with the same name per school
+inventorySchema.index(
+    { schoolId: 1, name: 1, isDeleted: 1 },
+    { unique: true, partialFilterExpression: { isDeleted: false } }
+);
 
-module.exports = inventoryModel
+module.exports = mongoose.model("Inventory", inventorySchema);
