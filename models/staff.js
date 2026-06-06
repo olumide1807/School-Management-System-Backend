@@ -57,6 +57,26 @@ const staffSchema = new mongoose.Schema(
     },
     resetPasswordToken: String,
     resetPasswordExpire: Date,
+    staffID: {
+      type: String,
+      unique: true,
+      sparse: true
+    },
+    qualifications: [{
+      degree: String,
+      fieldOfStudy: String,
+      institution: String,
+      yearGraduated: Number,
+      certificateUrl: String
+    }],
+    isActive: {
+      type: Boolean,
+      default: true
+    },
+    deactivatedAt: {
+      type: Date,
+      default: null
+    },
   },
   { timestamps: true }
 );

@@ -492,3 +492,29 @@ exports.assignTeacherToClass = asyncHandler(async (req, res, next) => {
     next(e);
   }
 })
+
+/////////////////////////////////////////////////
+
+exports.unassignTeacherFromClass = asyncHandler(async (req, res, next) => {
+  try {
+    const schoolId = req.user.schoolName ? req.user.id : req.user.schoolId;
+    const { classArmId } = req.params;
+
+    if (!isValidMongoId(classArmId)) {
+      return next(new ErrorResponse("Invalid classArmId", 400));
+    }
+
+    const classArm = await classArmModel.findOne({ _id: classArmId, schoolId });
+    if (!classArm) {
+      return next(new ErrorResponse("Class arm not found", 404));
+    }
+
+    classArm.assignedTeacher = null;
+    await classArm.save();
+
+    successResponse(res, 200, "Teacher unassigned successfully");
+  } catch (e) {
+    console.error("Error unassigning teacher:", e);
+    next(e);
+  }
+});

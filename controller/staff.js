@@ -9,6 +9,7 @@ const sendNotificationFallback = require("../utils/sendNotificationFallback");
 const { successResponse } = require("../utils/successResponse");
 const { isValidMongoId } = require("../utils/isValidMongoObjectId");
 const { changeTimeFormat, timeFormat } = require("../utils/formatTime");
+const { generateStaffId } = require("../utils/generateStaffId");
 const cloudinary = require("../utils/cloudinary");
 
 // middleware
@@ -57,7 +58,7 @@ exports.createStaff = asyncHandler(async (req, res, next) => {
       schoolId,
     });
     if (existingStaff) {
-      return next(new ErrorResponse("Staff already exists!", 400));
+      return next(new ErrorResponse("A staff member with this email already exists. Each staff needs a unique email for login.", 400));
     }
 
     // Upload profile picture if provided
@@ -71,13 +72,16 @@ exports.createStaff = asyncHandler(async (req, res, next) => {
     const hashedPassword = await GeneratePassword(password);
     others.password = hashedPassword;
 
+    // Auto-generate staff ID
+    const staffID = await generateStaffId(schoolId, SuperAdminModel, staffModel);
+    others.staffID = staffID;
+ 
     // Create the staff in the database
     const newStaff = await staffModel.create(others);
 
     // Send notification
     const school = await SuperAdminModel.findById(schoolId);
-    const message = `Congratulations! You have been added to ${school.schoolName} as a staff (${newStaff.staffType}). Your password is ${password} and email is ${others.emailAddress}`;
-    const html = `<p>${message}</p>`;
+    const message = `Congratulations! You have been added to ${school.schoolName} as a staff (${newStaff.staffType}). Your Staff ID is ${staffID}, password is ${password}, and email is ${others.emailAddress}`;    const html = `<p>${message}</p>`;
     const title = `Addition into ${school.schoolName}'s staff team.`;
     const sendMessage = await sendNotificationFallback(
       others.emailAddress,
@@ -642,6 +646,7 @@ exports.getStaffAttendance = asyncHandler(async (req, res, next) => {
 });
 
 ///////////////////////////////////////////////////////////////////////////////////////////
+
 exports.updateAttendance = asyncHandler(async (req, res, next) => {
   try {
     const { error } = validateUpdateStaffAttendance(req.body);
@@ -687,6 +692,7 @@ exports.updateAttendance = asyncHandler(async (req, res, next) => {
 });
 
 ///////////////////////////////////////////////////////////////////////////////////
+
 exports.deleteAttendance = asyncHandler(async (req, res, next) => {
   try {
     const { id } = req.params;
@@ -728,6 +734,191 @@ exports.deleteAttendance = asyncHandler(async (req, res, next) => {
     successResponse(res, 200, "student attendance deleted successfully");
   } catch (error) {
     console.error("An error occured while deleting student attendance!", error);
+    next(error);
+  }
+});
+
+///////////////////////////////////////////////////////////////////////////////////
+
+exports.deactivateStaff = asyncHandler(async (req, res, next) => {
+  try {
+    const schoolId = req.user.schoolName ? req.user.id : req.user.schoolId;
+    const { id } = req.params;
+ 
+    if (!isValidMongoId(id)) {
+      return next(new ErrorResponse("Invalid staff id", 400));
+    }
+ 
+    const staff = await staffModel.findOne({ _id: id, schoolId });
+    if (!staff) {
+      return next(new ErrorResponse("Staff not found", 404));
+    }
+ 
+    if (!staff.isActive && staff.isActive !== undefined) {
+      return next(new ErrorResponse("Staff is already deactivated", 400));
+    }
+ 
+    staff.isActive = false;
+    staff.deactivatedAt = new Date();
+    await staff.save();
+ 
+    successResponse(res, 200, `${staff.firstName} ${staff.surname} has been deactivated`, staff);
+  } catch (error) {
+    console.error("Error deactivating staff:", error);
+    next(error);
+  }
+});
+
+///////////////////////////////////////////////////////////////////////////////////
+
+exports.activateStaff = asyncHandler(async (req, res, next) => {
+  try {
+    const schoolId = req.user.schoolName ? req.user.id : req.user.schoolId;
+    const { id } = req.params;
+ 
+    if (!isValidMongoId(id)) {
+      return next(new ErrorResponse("Invalid staff id", 400));
+    }
+ 
+    const staff = await staffModel.findOne({ _id: id, schoolId });
+    if (!staff) {
+      return next(new ErrorResponse("Staff not found", 404));
+    }
+ 
+    if (staff.isActive !== false) {
+      return next(new ErrorResponse("Staff is already active", 400));
+    }
+ 
+    staff.isActive = true;
+    staff.deactivatedAt = null;
+    await staff.save();
+ 
+    successResponse(res, 200, `${staff.firstName} ${staff.surname} has been reactivated`, staff);
+  } catch (error) {
+    console.error("Error activating staff:", error);
+    next(error);
+  }
+});
+
+///////////////////////////////////////////////////////////////////////////////////
+
+exports.uploadFile = asyncHandler(async (req, res, next) => {
+  try {
+    if (!req.file) {
+      return next(new ErrorResponse("Please upload a file", 400));
+    }
+ 
+    const result = await cloudinary.uploader.upload(req.file.path, {
+      folder: "staff-certificates",
+      resource_type: "auto"
+    });
+ 
+    successResponse(res, 200, "File uploaded successfully", {
+      url: result.secure_url,
+      publicId: result.public_id,
+      originalName: req.file.originalname
+    });
+  } catch (error) {
+    console.error("Error uploading file:", error);
+    next(error);
+  }
+});
+
+///////////////////////////////////////////////////////////////////////////////////
+
+exports.adminUpdateStaff = asyncHandler(async (req, res, next) => {
+  try {
+    const schoolId = req.user.schoolName ? req.user.id : req.user.schoolId;
+    const { id } = req.params;
+ 
+    if (!isValidMongoId(id)) {
+      return next(new ErrorResponse("Invalid staff id", 400));
+    }
+ 
+    const staff = await staffModel.findOne({ _id: id, schoolId });
+    if (!staff) {
+      return next(new ErrorResponse("Staff not found", 404));
+    }
+ 
+    // Fields that can be updated by admin
+    const allowedFields = [
+      'title', 'firstName', 'surname', 'otherName', 'gender',
+      'maritalStatus', 'emailAddress', 'phoneNumber', 'country',
+      'stateOfOrigin', 'localGovernmentArea', 'religion',
+      'homeAddress', 'staffType', 'salary', 'employmentDate',
+      'nextOfKinFirstName', 'nextOfKinSurname', 'nextOfKinPhoneNumber',
+      'nextOfKinRelationship', 'qualifications', 'profilePicture'
+    ];
+ 
+    // Apply updates
+    allowedFields.forEach(field => {
+      if (req.body[field] !== undefined) {
+        staff[field] = req.body[field];
+      }
+    });
+ 
+    // Handle profile picture upload if file provided
+    if (req.file) {
+      const result = await cloudinary.uploader.upload(req.file.path);
+      staff.profilePicture = result.secure_url;
+    }
+ 
+    await staff.save();
+ 
+    successResponse(res, 200, "Staff profile updated successfully", staff);
+  } catch (error) {
+    console.error("Error updating staff (admin):", error);
+    next(error);
+  }
+});
+
+///////////////////////////////////////////////////////////////////////////////////
+
+exports.resetStaffPassword = asyncHandler(async (req, res, next) => {
+  try {
+    const schoolId = req.user.schoolName ? req.user.id : req.user.schoolId;
+    const { id } = req.params;
+ 
+    if (!isValidMongoId(id)) {
+      return next(new ErrorResponse("Invalid staff id", 400));
+    }
+ 
+    const staff = await staffModel.findOne({ _id: id, schoolId });
+    if (!staff) {
+      return next(new ErrorResponse("Staff not found", 404));
+    }
+ 
+    // Generate new random password
+    const newPassword = generateRandomPassword();
+    const hashedPassword = await hashPassword(newPassword);
+    staff.password = hashedPassword;
+    await staff.save();
+ 
+    // Send new password via email
+    const school = await SuperAdminModel.findById(schoolId);
+    const message = `Your password for ${school?.schoolName || 'the school'} has been reset by an administrator. Your new password is: ${newPassword}. Please log in and change it immediately.`;
+    const html = `<p>${message}</p>`;
+    const subject = `Password Reset - ${school?.schoolName || 'School Management System'}`;
+ 
+    let emailSent = false;
+    try {
+      emailSent = await sendNotificationFallback(
+        staff.emailAddress,
+        subject,
+        message,
+        html
+      );
+    } catch (emailErr) {
+      console.log("Email notification failed for password reset.");
+    }
+ 
+    const emailNote = emailSent
+      ? `New password has been sent to ${staff.emailAddress}`
+      : `Password reset successful. Email notification failed — please share the new password manually: ${newPassword}`;
+ 
+    successResponse(res, 200, emailNote, { newPassword });
+  } catch (error) {
+    console.error("Error resetting staff password:", error);
     next(error);
   }
 });

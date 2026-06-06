@@ -13,7 +13,8 @@ const {
     getAllClassArms,
     getAllClassArmsInALevel,
     getClassArmById,
-    assignTeacherToClass
+    assignTeacherToClass,
+    unassignTeacherFromClass
 } = require("../controller/class");
 
 
@@ -47,6 +48,9 @@ router.put('/arm/:id', multipleProtect(["super admin", "admin"]), updateArm);
 
 // assign teacher
 router.put('/:classArmId/teacher/assign/:staffId', multipleProtect(["super admin", "admin"]), assignTeacherToClass);
+
+// unassign teacher
+router.put('/:classArmId/teacher/unassign', multipleProtect(["super admin", "admin"]), unassignTeacherFromClass);
 
 // delete
 router.delete('/:id', multipleProtect(["super admin"]), deleteClass);
