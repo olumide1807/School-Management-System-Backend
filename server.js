@@ -64,6 +64,8 @@ const assessmentRouter = require("./route/assessment.js");
 const timetableGridRouter = require("./route/timetableGrid.js");
 const paymentRouter = require("./route/payment.js");
 const attendanceRouter = require("./route/attendance");
+const settingsRouter = require("./route/schoolSettings");
+   app.use("/settings", settingsRouter);
 
 // middlewares
 app.use(Treblle({

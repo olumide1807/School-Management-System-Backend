@@ -781,3 +781,35 @@ exports.getAllStudentsInAClass = asyncHandler(async (req, res, next) => {
     next(e);
   }
 })
+
+//////////////////////////////////////////////////
+
+exports.promoteStudents = asyncHandler(async (req, res, next) => {
+  try {
+    const schoolId = req.user.schoolName ? req.user.id : req.user.schoolId;
+    const { fromClassArmId, toClassArmId } = req.body;
+ 
+    if (!fromClassArmId || !toClassArmId) {
+      return next(new ErrorResponse("fromClassArmId and toClassArmId are required", 400));
+    }
+ 
+    if (fromClassArmId === toClassArmId) {
+      return next(new ErrorResponse("Source and destination classes cannot be the same", 400));
+    }
+ 
+    // Update all active students in the source class
+    const result = await studentModel.updateMany(
+      { schoolId, classArmId: fromClassArmId, status: "active" },
+      { $set: { classArmId: toClassArmId } }
+    );
+ 
+    successResponse(res, 200, `${result.modifiedCount} student(s) promoted successfully`, {
+      promoted: result.modifiedCount,
+      fromClassArmId,
+      toClassArmId,
+    });
+  } catch (error) {
+    console.error("Error promoting students:", error);
+    next(error);
+  }
+});

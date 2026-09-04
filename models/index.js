@@ -11,7 +11,7 @@ module.exports = {
     timeTableModel: require("./timetable"),
     periodTimeModel: require("./periodTime"),
     gradeModel : require("./grade"),
-    staffAttendanceModel: require("./staff_attendance"),
+    staffAttendanceModel: require("./staffAttendance"),
     studentAttendanceModel: require("./student_attendance"),
     sessionModel: require("./session"),
     termModel: require("./term"),
@@ -23,4 +23,5 @@ module.exports = {
     paymentModel: require("./payment"),
     inventoryModel: require("./inventory"),
     stockMovementModel: require("./stockMovement"),
+    schoolSettingsModel: require("./schoolSettings"),
 }

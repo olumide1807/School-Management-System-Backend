@@ -13,8 +13,8 @@ const {
     parentModel,
 } = require("../models");
 
-exports.createParent = asyncHandler(async(req, res, next) => {
-    try{
+exports.createParent = asyncHandler(async (req, res, next) => {
+    try {
         // validate request body
         const { error } = validateCreateParent(req.body);
 
@@ -68,7 +68,7 @@ exports.createParent = asyncHandler(async(req, res, next) => {
 })
 
 exports.editParent = asyncHandler(async (req, res, next) => {
-    try{
+    try {
         // validate request body
         const { error } = validateEditParent(req.body);
 
@@ -78,7 +78,7 @@ exports.editParent = asyncHandler(async (req, res, next) => {
         const schoolId = req.user.schoolName ? req.user.id : req.user.schoolId;
 
         // destructure the query params
-        const {id} = req.params;
+        const { id } = req.params;
 
         // does the parent exist?
         const parent = await parentModel.findOne({
@@ -104,7 +104,7 @@ exports.editParent = asyncHandler(async (req, res, next) => {
 })
 
 exports.linkStudent = asyncHandler(async (req, res, next) => {
-    try{
+    try {
         // validate request body
         const { error } = validateLinkStudent(req.body);
 
@@ -161,7 +161,7 @@ exports.linkStudent = asyncHandler(async (req, res, next) => {
 })
 
 exports.deleteParent = asyncHandler(async (req, res, next) => {
-    try{
+    try {
         // extract the schoolId
         const schoolId = req.user.schoolName ? req.user.id : req.user.schoolId;
 
@@ -191,7 +191,7 @@ exports.deleteParent = asyncHandler(async (req, res, next) => {
 })
 
 exports.getAllParents = asyncHandler(async (req, res, next) => {
-    try{
+    try {
         // extract the schoolId
         const schoolId = req.user.schoolName ? req.user.id : req.user.schoolId;
 
@@ -200,7 +200,7 @@ exports.getAllParents = asyncHandler(async (req, res, next) => {
             schoolId
         }
 
-        if(req.query.isLinked) {
+        if (req.query.isLinked) {
             search.isLinked = req.query.isLinked;
         }
 
@@ -210,8 +210,38 @@ exports.getAllParents = asyncHandler(async (req, res, next) => {
 
         // send successResponse
         successResponse(res, 200, null, parents);
-    } catch(err){
+    } catch (err) {
         console.error("Error getting all parents", err);
         next(err);
+    }
+});
+
+exports.updateParent = asyncHandler(async (req, res, next) => {
+    try {
+        const schoolId = req.user.schoolName ? req.user.id : req.user.schoolId;
+        const { id } = req.params;
+
+        const parent = await parentModel.findOne({ _id: id, schoolId });
+        if (!parent) {
+            return next(new ErrorResponse("Parent not found", 404));
+        }
+
+        const allowedFields = [
+            'title', 'firstName', 'surName', 'email',
+            'phoneNumber', 'occupation', 'country',
+            'stateOfOrigin', 'localGovernmentArea', 'address'
+        ];
+
+        allowedFields.forEach(field => {
+            if (req.body[field] !== undefined) {
+                parent[field] = req.body[field];
+            }
+        });
+
+        await parent.save();
+        successResponse(res, 200, "Parent updated successfully", parent);
+    } catch (error) {
+        console.error("Error updating parent:", error);
+        next(error);
     }
 });

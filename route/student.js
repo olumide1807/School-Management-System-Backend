@@ -5,8 +5,10 @@ const upload = require("../utils/multer");
 const multipleProtect = require("../middleware/multipleAuth");
 const router = express.Router();
 
-const { registerStudent, linkNewParent, deleteStudent, deactivateStudent, activateStudent, editStudent, getAllStudents, createAttendance, updateAttendance, deleteAttendance, getAllStudentAttendance, getStudentAttendance, getAllStudentsInAClass } = require("../controller/student");
+const { registerStudent, linkNewParent, deleteStudent, deactivateStudent, activateStudent, editStudent, getAllStudents, createAttendance, updateAttendance, deleteAttendance, getAllStudentAttendance, getStudentAttendance, getAllStudentsInAClass, promoteStudents } = require("../controller/student");
 const {createResult} = require('../controller/result')
+
+router.put('/promote', multipleProtect(["super admin", "admin"]), promoteStudents);
 
 // read all student
 router.get("/", multipleProtect(["super admin", "admin"]), getAllStudents);
