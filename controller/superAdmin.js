@@ -212,19 +212,22 @@ exports.getProfile = asyncHandler(async (req, res, next) => {
       );
     }
 
-    // Avoid exposing sensitive information, only include necessary fields
-    const { _id, emailAddress, fullName, createdAt, phoneNumber, schoolName } =
-      admin;
-
-    res.status(200).json({
+        res.status(200).json({
       success: true,
       data: {
-        _id,
-        emailAddress,
-        fullName,
-        createdAt,
-        phoneNumber,
-        schoolName,
+        _id: admin._id,
+        emailAddress: admin.emailAddress,
+        fullName: admin.fullName,
+        firstName: admin.firstName,
+        lastName: admin.lastName,
+        createdAt: admin.createdAt,
+        phoneNumber: admin.phoneNumber,
+        schoolName: admin.schoolName,
+        schoolMotto: admin.schoolMotto,
+        schoolInitials: admin.schoolInitials,
+        schoolEmailAddress: admin.schoolEmailAddress,
+        schoolAddress: admin.schoolAddress,
+        photo: admin.schoolLogo,
       },
     });
   } catch (err) {
