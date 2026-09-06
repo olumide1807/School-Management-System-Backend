@@ -12,7 +12,6 @@ const staffAttendanceSchema = new mongoose.Schema({
         required: true
     },
     date: {
-        // Normalised to start-of-day UTC
         type: Date,
         required: true
     },
@@ -20,6 +19,13 @@ const staffAttendanceSchema = new mongoose.Schema({
         type: String,
         enum: ["present", "absent", "late", "on_leave"],
         required: true
+    },
+    checkInTime: {
+        // "HH:MM" 24-hour format e.g. "08:45"
+        // Only set when status is "present" or "late"
+        // System auto-derives present vs late based on school start time + grace period
+        type: String,
+        default: null
     },
     note: {
         type: String,
@@ -35,9 +41,7 @@ const staffAttendanceSchema = new mongoose.Schema({
     }
 }, { timestamps: true });
 
-// One record per staff per day
 staffAttendanceSchema.index({ staffId: 1, date: 1 }, { unique: true });
-// Fast lookup for school-wide queries
 staffAttendanceSchema.index({ schoolId: 1, date: 1 });
 
 module.exports = mongoose.model("StaffAttendance", staffAttendanceSchema);

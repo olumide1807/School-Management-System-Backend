@@ -65,7 +65,9 @@ const timetableGridRouter = require("./route/timetableGrid.js");
 const paymentRouter = require("./route/payment.js");
 const attendanceRouter = require("./route/attendance");
 const settingsRouter = require("./route/schoolSettings");
-   app.use("/settings", settingsRouter);
+app.use("/settings", settingsRouter);
+const staffAttendanceRouter = require("./route/staffAttendance");
+app.use("/staff-attendance", staffAttendanceRouter);
 
 // middlewares
 app.use(Treblle({
@@ -97,11 +99,12 @@ app.use("/parent", parentRouter);
 app.use("/grade", gradeRouter);
 app.use("/inventory", inventoryRouter);
 app.use("/fee", feeRouter);
-app.use('/result',resultRouter)
+app.use('/result', resultRouter)
 app.use("/assessment", assessmentRouter);
 app.use("/timetable-grid", timetableGridRouter);
 app.use("/payment", paymentRouter);
 app.use("/attendance", attendanceRouter);
+app.use("/settings", settingsRouter);
 
 
 // debug route

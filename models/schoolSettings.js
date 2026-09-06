@@ -24,6 +24,12 @@ const schoolSettingsSchema = new mongoose.Schema({
         emailOnPasswordReset: { type: Boolean, default: true },
     },
 
+    // Attendance Settings
+    attendanceSettings: {
+        schoolStartTime: { type: String, default: "08:00" },  // "HH:MM" 24hr
+        gracePeriodMinutes: { type: Number, default: 15 },    // minutes after start = still "present"
+    },
+
     // Registration control
     registrationOpen: { type: Boolean, default: true },
 
@@ -49,6 +55,12 @@ const schoolSettingsSchema = new mongoose.Schema({
             { grade: "E", minScore: 30, maxScore: 39, remark: "Poor" },
             { grade: "F", minScore: 0, maxScore: 29, remark: "Fail" },
         ],
+    },
+
+        // Attendance settings
+    attendanceSettings: {
+        schoolStartTime: { type: String, default: "08:00" },
+        gracePeriodMinutes: { type: Number, default: 15 },
     },
 }, { timestamps: true });
 
