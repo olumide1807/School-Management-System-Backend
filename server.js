@@ -66,6 +66,9 @@ const paymentRouter = require("./route/payment.js");
 const attendanceRouter = require("./route/attendance");
 const settingsRouter = require("./route/schoolSettings");
 const staffAttendanceRouter = require("./route/staffAttendance");
+const authRouter = require("./route/auth");
+   app.use("/auth", authRouter);
+
 
 app.use("/staff-attendance", staffAttendanceRouter);
 
