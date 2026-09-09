@@ -67,10 +67,9 @@ const attendanceRouter = require("./route/attendance");
 const settingsRouter = require("./route/schoolSettings");
 const staffAttendanceRouter = require("./route/staffAttendance");
 const authRouter = require("./route/auth");
-   app.use("/auth", authRouter);
 
 
-app.use("/staff-attendance", staffAttendanceRouter);
+// app.use("/staff-attendance", staffAttendanceRouter);
 
 // middlewares
 app.use(Treblle({
@@ -109,6 +108,7 @@ app.use("/payment", paymentRouter);
 app.use("/attendance", attendanceRouter);
 app.use("/settings", settingsRouter);
 app.use("/staff-attendance", staffAttendanceRouter);
+app.use("/auth", authRouter);
 
 
 // debug route

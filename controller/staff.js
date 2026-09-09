@@ -75,13 +75,13 @@ exports.createStaff = asyncHandler(async (req, res, next) => {
     // Auto-generate staff ID
     const staffID = await generateStaffId(schoolId, SuperAdminModel, staffModel);
     others.staffID = staffID;
- 
+
     // Create the staff in the database
     const newStaff = await staffModel.create(others);
 
     // Send notification
     const school = await SuperAdminModel.findById(schoolId);
-    const message = `Congratulations! You have been added to ${school.schoolName} as a staff (${newStaff.staffType}). Your Staff ID is ${staffID}, password is ${password}, and email is ${others.emailAddress}`;    const html = `<p>${message}</p>`;
+    const message = `Congratulations! You have been added to ${school.schoolName} as a staff (${newStaff.staffType}). Your Staff ID is ${staffID}, password is ${password}, and email is ${others.emailAddress}`; const html = `<p>${message}</p>`;
     const title = `Addition into ${school.schoolName}'s staff team.`;
     const sendMessage = await sendNotificationFallback(
       others.emailAddress,
@@ -116,7 +116,11 @@ exports.createStaff = asyncHandler(async (req, res, next) => {
     }
 
     const successMessage = `Staff created successfully ${additionalMessage}`;
-    successResponse(res, 201, successMessage, null);
+    successResponse(res, 201, successMessage, {
+      staffID,
+      emailAddress: others.emailAddress,
+      temporaryPassword: password
+    });
   } catch (error) {
     console.error("An error occurred while creating staff:", error);
     next(error);
@@ -172,18 +176,18 @@ exports.Login = asyncHandler(async (req, res, next) => {
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 exports.getAdminStaffs = asyncHandler(async (req, res, next) => {
-  try{
-      // extract the schoolId
-  const schoolId = req.user.schoolName ? req.user.id : req.user.schoolId;
+  try {
+    // extract the schoolId
+    const schoolId = req.user.schoolName ? req.user.id : req.user.schoolId;
 
-  // find all admin staffs
-  const staffs = await staffModel.find({
-    isAdmin: true,
-    schoolId
-  });
+    // find all admin staffs
+    const staffs = await staffModel.find({
+      isAdmin: true,
+      schoolId
+    });
 
-  // send response
-  successResponse(res, 200, null, staffs);
+    // send response
+    successResponse(res, 200, null, staffs);
   } catch (error) {
     console.error("Error getting admin staffs:", error);
     next(error);
@@ -193,24 +197,24 @@ exports.getAdminStaffs = asyncHandler(async (req, res, next) => {
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 exports.getAllStaffs = asyncHandler(async (req, res, next) => {
-  try{
-      // extract the schoolId
-  const schoolId = req.user.schoolName ? req.user.id : req.user.schoolId;
+  try {
+    // extract the schoolId
+    const schoolId = req.user.schoolName ? req.user.id : req.user.schoolId;
 
-  // set the search
-  let search = {
-    schoolId
-  }
+    // set the search
+    let search = {
+      schoolId
+    }
 
-  if (req.query.role) {
-    search.staffType = req.query.role
-  }
+    if (req.query.role) {
+      search.staffType = req.query.role
+    }
 
-  // find all staffs
-  const staffs = await staffModel.find(search);
+    // find all staffs
+    const staffs = await staffModel.find(search);
 
-  // send response
-  successResponse(res, 200, null, staffs);
+    // send response
+    successResponse(res, 200, null, staffs);
   } catch (error) {
     console.error("Error getting all staffs:", error);
     next(error);
@@ -381,11 +385,11 @@ exports.makeAdmin = asyncHandler(async (req, res, next) => {
 
     const sendMessage = await sendNotificationFallback(recipient, subject, text, html);
 
-    let additionalMessage = sendMessage 
+    let additionalMessage = sendMessage
       ? `The system has successfully notified ${staff.firstName}!`
       : `The system has failed to notify ${staff.firstName}! Please endeavor to do that manually.`;
 
-    let successMessage = `Staff has been successfully promoted to the school's Administrative board. ${additionalMessage}`;  
+    let successMessage = `Staff has been successfully promoted to the school's Administrative board. ${additionalMessage}`;
 
     successResponse(res, 200, successMessage, null);
   } catch (error) {
@@ -428,7 +432,7 @@ exports.removeAdmin = asyncHandler(async (req, res, next) => {
       ? `The system has successfully notified ${staff.firstName}!`
       : `The system has failed to notify ${staff.firstName}! Please endeavor to do that manually.`;
 
-    let successMessage = `Staff has been successfully removed from the school's Administrative board. ${additionalMessage}`;  
+    let successMessage = `Staff has been successfully removed from the school's Administrative board. ${additionalMessage}`;
 
     successResponse(res, 200, successMessage, null);
   } catch (error) {
@@ -744,24 +748,24 @@ exports.deactivateStaff = asyncHandler(async (req, res, next) => {
   try {
     const schoolId = req.user.schoolName ? req.user.id : req.user.schoolId;
     const { id } = req.params;
- 
+
     if (!isValidMongoId(id)) {
       return next(new ErrorResponse("Invalid staff id", 400));
     }
- 
+
     const staff = await staffModel.findOne({ _id: id, schoolId });
     if (!staff) {
       return next(new ErrorResponse("Staff not found", 404));
     }
- 
+
     if (!staff.isActive && staff.isActive !== undefined) {
       return next(new ErrorResponse("Staff is already deactivated", 400));
     }
- 
+
     staff.isActive = false;
     staff.deactivatedAt = new Date();
     await staff.save();
- 
+
     successResponse(res, 200, `${staff.firstName} ${staff.surname} has been deactivated`, staff);
   } catch (error) {
     console.error("Error deactivating staff:", error);
@@ -775,24 +779,24 @@ exports.activateStaff = asyncHandler(async (req, res, next) => {
   try {
     const schoolId = req.user.schoolName ? req.user.id : req.user.schoolId;
     const { id } = req.params;
- 
+
     if (!isValidMongoId(id)) {
       return next(new ErrorResponse("Invalid staff id", 400));
     }
- 
+
     const staff = await staffModel.findOne({ _id: id, schoolId });
     if (!staff) {
       return next(new ErrorResponse("Staff not found", 404));
     }
- 
+
     if (staff.isActive !== false) {
       return next(new ErrorResponse("Staff is already active", 400));
     }
- 
+
     staff.isActive = true;
     staff.deactivatedAt = null;
     await staff.save();
- 
+
     successResponse(res, 200, `${staff.firstName} ${staff.surname} has been reactivated`, staff);
   } catch (error) {
     console.error("Error activating staff:", error);
@@ -807,12 +811,12 @@ exports.uploadFile = asyncHandler(async (req, res, next) => {
     if (!req.file) {
       return next(new ErrorResponse("Please upload a file", 400));
     }
- 
+
     const result = await cloudinary.uploader.upload(req.file.path, {
       folder: "staff-certificates",
       resource_type: "auto"
     });
- 
+
     successResponse(res, 200, "File uploaded successfully", {
       url: result.secure_url,
       publicId: result.public_id,
@@ -830,16 +834,16 @@ exports.adminUpdateStaff = asyncHandler(async (req, res, next) => {
   try {
     const schoolId = req.user.schoolName ? req.user.id : req.user.schoolId;
     const { id } = req.params;
- 
+
     if (!isValidMongoId(id)) {
       return next(new ErrorResponse("Invalid staff id", 400));
     }
- 
+
     const staff = await staffModel.findOne({ _id: id, schoolId });
     if (!staff) {
       return next(new ErrorResponse("Staff not found", 404));
     }
- 
+
     // Fields that can be updated by admin
     const allowedFields = [
       'title', 'firstName', 'surname', 'otherName', 'gender',
@@ -849,22 +853,22 @@ exports.adminUpdateStaff = asyncHandler(async (req, res, next) => {
       'nextOfKinFirstName', 'nextOfKinSurname', 'nextOfKinPhoneNumber',
       'nextOfKinRelationship', 'qualifications', 'profilePicture'
     ];
- 
+
     // Apply updates
     allowedFields.forEach(field => {
       if (req.body[field] !== undefined) {
         staff[field] = req.body[field];
       }
     });
- 
+
     // Handle profile picture upload if file provided
     if (req.file) {
       const result = await cloudinary.uploader.upload(req.file.path);
       staff.profilePicture = result.secure_url;
     }
- 
+
     await staff.save();
- 
+
     successResponse(res, 200, "Staff profile updated successfully", staff);
   } catch (error) {
     console.error("Error updating staff (admin):", error);
@@ -878,28 +882,28 @@ exports.resetStaffPassword = asyncHandler(async (req, res, next) => {
   try {
     const schoolId = req.user.schoolName ? req.user.id : req.user.schoolId;
     const { id } = req.params;
- 
+
     if (!isValidMongoId(id)) {
       return next(new ErrorResponse("Invalid staff id", 400));
     }
- 
+
     const staff = await staffModel.findOne({ _id: id, schoolId });
     if (!staff) {
       return next(new ErrorResponse("Staff not found", 404));
     }
- 
+
     // Generate new random password
     const newPassword = generateRandomPassword();
     const hashedPassword = await hashPassword(newPassword);
     staff.password = hashedPassword;
     await staff.save();
- 
+
     // Send new password via email
     const school = await SuperAdminModel.findById(schoolId);
     const message = `Your password for ${school?.schoolName || 'the school'} has been reset by an administrator. Your new password is: ${newPassword}. Please log in and change it immediately.`;
     const html = `<p>${message}</p>`;
     const subject = `Password Reset - ${school?.schoolName || 'School Management System'}`;
- 
+
     let emailSent = false;
     try {
       emailSent = await sendNotificationFallback(
@@ -911,11 +915,11 @@ exports.resetStaffPassword = asyncHandler(async (req, res, next) => {
     } catch (emailErr) {
       console.log("Email notification failed for password reset.");
     }
- 
+
     const emailNote = emailSent
       ? `New password has been sent to ${staff.emailAddress}`
       : `Password reset successful. Email notification failed — please share the new password manually: ${newPassword}`;
- 
+
     successResponse(res, 200, emailNote, { newPassword });
   } catch (error) {
     console.error("Error resetting staff password:", error);

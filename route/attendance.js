@@ -14,7 +14,7 @@ const router = express.Router();
 // Batch mark attendance for a class (main endpoint teachers use)
 router.post(
     "/class",
-    multiProtect(["super admin", "staff", "academic"]),
+    multiProtect(["super admin", "staff", "admin", "academic"]),
     markClassAttendance
 );
 
@@ -42,13 +42,13 @@ router.get(
 // Update / delete a specific record
 router.put(
     "/:id",
-    multiProtect(["super admin", "staff", "academic"]),
+    multiProtect(["super admin", "staff", "admin", "academic"]),
     updateAttendanceRecord
 );
 
 router.delete(
     "/:id",
-    multiProtect(["super admin", "staff", "academic"]),
+    multiProtect(["super admin", "staff", "admin", "academic"]),
     deleteAttendanceRecord
 );
 

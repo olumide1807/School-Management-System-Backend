@@ -204,10 +204,13 @@ exports.getAllSubject = asyncHandler(async (req, res, next) => {
   try {
     const schoolId = req.user.schoolName ? req.user.id : req.user.schoolId;
 
-    const subjects = await SubjectModel.find({
-      schoolId,
-    });
+    // Return every specific subject (class assignment) in the school
+    if (req.query.find === "allSpecificSubjects") {
+      const specificSubjects = await specificSubjectModel.find({ schoolId });
+      return successResponse(res, 200, null, specificSubjects);
+    }
 
+    const subjects = await SubjectModel.find({ schoolId });
     successResponse(res, 200, null, subjects);
   } catch (error) {
     console.error("Error fetching all subjects:", error);
@@ -284,8 +287,7 @@ exports.getSubjectById = asyncHandler(async (req, res, next) => {
     if (!subject) {
       return next(
         new ErrorResponse(
-          `${
-            req.query.find === "subject" ? "subject" : "specific subject"
+          `${req.query.find === "subject" ? "subject" : "specific subject"
           } not found!`,
           404
         )
@@ -437,7 +439,7 @@ exports.deleteSubject = asyncHandler(async (req, res, next) => {
     if (req.query.find === "specificSubject") {
       // Get the specific subject data BEFORE deleting
       const specificSubject = await specificSubjectModel.findById(id);
-      
+
       if (!specificSubject) {
         return next(new ErrorResponse("specificSubject does not exist!", 404));
       }
@@ -492,10 +494,10 @@ exports.editSpecificSubject = asyncHandler(async (req, res, next) => {
     const { subjectTeacherId } = req.body;
 
     // validate ids
-    for (id of [id, subjectTeacherId]) {
-      if (!isValidMongoId(id)) {
+    for (const currentId of [id, subjectTeacherId]) {
+      if (!isValidMongoId(currentId)) {
         return next(
-          new ErrorResponse("Invalid Id(specific subject or teacher) provided!")
+          new ErrorResponse("Invalid Id(specific subject or teacher) provided!", 400)
         );
       }
     }
