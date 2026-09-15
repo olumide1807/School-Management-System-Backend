@@ -101,6 +101,14 @@ exports.markClassAttendance = asyncHandler(async (req, res, next) => {
             ));
         }
 
+        // GUARD: no weekends
+        const weekday = targetDate.getDay();
+        if (weekday === 0 || weekday === 6) {
+            return next(new ErrorResponse(
+                "Attendance can only be marked on school days", 400
+            ));
+        }
+
         const classArm = await classArmModel.findOne({ _id: classArmId, schoolId });
         if (!classArm) {
             return next(new ErrorResponse("Class arm not found in your school", 404));

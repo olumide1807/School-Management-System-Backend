@@ -11,7 +11,7 @@ const router = express.Router();
 
 router.post("/mark", multiProtect(["super admin", "admin"]), markStaffAttendance);
 router.get("/", multiProtect(["super admin", "admin"]), getStaffAttendance);
-router.get("/staff/:staffId", multiProtect(["super admin", "admin"]), getSingleStaffAttendance);
+router.get("/staff/:staffId", multiProtect(["super admin", "admin", "academic", "non-academic"]), getSingleStaffAttendance);
 router.put("/:id", multiProtect(["super admin", "admin"]), updateStaffAttendance);
 
 module.exports = router;

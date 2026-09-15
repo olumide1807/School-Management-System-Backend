@@ -4,15 +4,24 @@ const assessmentSchema = new mongoose.Schema({
     assessments: [
         {
             name: String,
-            score: String
+            maxScore: Number,
+            order: Number
         }
     ],
+    classLevel: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'ClassLevel',
+        required: true
+    },
     schoolId: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: 'SuperAdmin'
+        ref: 'SuperAdmin',
+        required: true
     }
 }, { timestamps: true });
 
-const Announcement = mongoose.model('Assessment', assessmentSchema);
+assessmentSchema.index({ schoolId: 1, classLevel: 1 }, { unique: true });
 
-module.exports = Announcement;
+const Assessment = mongoose.model('Assessment', assessmentSchema);
+
+module.exports = Assessment;

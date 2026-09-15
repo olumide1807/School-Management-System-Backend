@@ -198,7 +198,13 @@ exports.getSingleStaffAttendance = asyncHandler(async (req, res, next) => {
         const schoolId = getSchoolId(req);
         const { staffId } = req.params;
         if (!isValidMongoId(staffId)) return next(new ErrorResponse("Invalid staffId", 400));
+        // Non-admins may only read their own record
+        const isAdminRole = req.user.userType === "admin";
+        if (!isAdminRole && String(staffId) !== String(req.user.id)) {
+            return next(new ErrorResponse("You can only view your own attendance", 403));
+        }
         const records = await staffAttendanceModel.find({ schoolId, staffId }).sort({ date: -1 });
+        
         successResponse(res, 200, null, records);
     } catch (e) {
         console.error("Error getting staff attendance:", e);

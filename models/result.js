@@ -1,80 +1,86 @@
 const mongoose = require('mongoose');
 
+// Scores snapshot the assessment definition that was in force when they were
+// entered. If a school changes its assessment format next year, historical
+// results stay readable and old report cards stay correct.
+const scoreSchema = new mongoose.Schema({
+    name: { type: String, required: true },      // "CA 1"
+    maxScore: { type: Number, required: true },  // 20
+    score: { type: Number, required: true },     // 17
+}, { _id: false });
+
+const subjectResultSchema = new mongoose.Schema({
+    subject: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Subject',
+        required: true
+    },
+    specificSubject: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'specificSubject',
+    },
+    scores: {
+        type: [scoreSchema],
+        default: []
+    },
+    // Denormalised so report cards don't re-sum on every render
+    Total: {
+        type: Number,
+        required: true,
+        default: 0
+    },
+    enteredBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Staff'
+    },
+    enteredAt: {
+        type: Date,
+        default: Date.now
+    }
+}, { _id: false });
 
 const resultSchema = new mongoose.Schema({
-
-    school : {
+    school: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'SuperAdmin',
-        required:true
+        required: true
     },
-
-
-    student : {
+    student: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Student',
-        required:true
+        required: true
     },
-    session : {
-
+    session: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Session',
-        required:true
-
+        required: true
     },
-
-    classLevel :{
-
+    classLevel: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'ClassLevel',
-        required:true
+        required: true
     },
-    classArm :{
-
+    classArm: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'ClassArm',
-        required:true
+        required: true
     },
-    Terms :[{
-        termId : {
+    Terms: [{
+        termId: {
             type: mongoose.Schema.Types.ObjectId,
             ref: 'Term',
-            // required:true
+            required: true
         },
-        subjects:[{
-            subject: {
-                type: mongoose.Schema.Types.ObjectId,
-                ref: 'Subject',
-            },
-            specificSubject:{
-                type: mongoose.Schema.Types.ObjectId,
-                ref: 'specifcSubjet',
-            },
-            CA1:{
-                type: Number,
-                required: true
-            },
-            CA2:{
-                type: Number,
-                required: true
-            },
-            Exam :{
-                type: Number,
-                required: true
-            },
-            Total:{
-                type: Number,
-                required: true
-            },
-        }]
+        subjects: {
+            type: [subjectResultSchema],
+            default: []
+        }
     }]
+}, { timestamps: true });
 
+// One result document per student per session
+resultSchema.index({ school: 1, student: 1, session: 1 }, { unique: true });
 
+const result = mongoose.model('result', resultSchema);
 
-
-
-})
-
-const result = mongoose.model('result', resultSchema)
-
-module.exports = result
+module.exports = result;

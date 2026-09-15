@@ -430,8 +430,8 @@ exports.assignTeacherToClass = asyncHandler(async (req, res, next) => {
     const { classArmId, staffId } = req.params;
 
     // validate classArmId and staffId
-    for(id of [classArmId, staffId]) {
-      if(!isValidMongoId(id)) {
+    for (const currentId of [classArmId, staffId]) {
+      if(!isValidMongoId(currentId)) {
         return next(new ErrorResponse("invalid classArmId or/and teacherId provided!", 400));
       }
     }

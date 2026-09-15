@@ -11,7 +11,7 @@ const {
 } = require("../controller/timetableGrid");
 
 // Period Settings
-router.get("/settings", multiProtect(["super admin", "admin"]), getPeriodSettings);
+router.get("/settings", multiProtect(["super admin", "admin", "academic"]), getPeriodSettings);
 router.put("/settings", multiProtect(["super admin"]), savePeriodSettings);
 
 // Timetable Grid

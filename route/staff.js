@@ -12,8 +12,8 @@ const router = Router();
 // get
 router.get('/', multipleProtect(["super admin", "admin"]), getAllStaffs)
 router.get('/admin', multipleProtect(["super admin", "admin"]), getAdminStaffs);
-router.get('/attendance', multipleProtect(["super admin", "admin", "staff"]), getAllStaffAttendance);
-router.get('/attendance/:id', multipleProtect(["super admin", "admin", "staff"]), getStaffAttendance)
+// router.get('/attendance', multipleProtect(["super admin", "admin", "staff"]), getAllStaffAttendance);
+// router.get('/attendance/:id', multipleProtect(["super admin", "admin", "staff"]), getStaffAttendance)
 router.get('/:id', multipleProtect(["super admin", "admin", "academic", "non-academic"]), getStaffById);
 
 // post

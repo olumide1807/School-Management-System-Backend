@@ -6,7 +6,7 @@ const multipleProtect = require("../middleware/multipleAuth");
 const router = express.Router();
 
 const { registerStudent, linkNewParent, deleteStudent, deactivateStudent, activateStudent, editStudent, getAllStudents, createAttendance, updateAttendance, deleteAttendance, getAllStudentAttendance, getStudentAttendance, getAllStudentsInAClass, promoteStudents } = require("../controller/student");
-const {createResult} = require('../controller/result')
+// const {createResult} = require('../controller/result')
 
 router.put('/promote', multipleProtect(["super admin", "admin"]), promoteStudents);
 
@@ -51,6 +51,6 @@ router.delete("/:id", multipleProtect(["super admin", "admin"]), deleteStudent);
 
 // result
 
-router.post('/upload-result',createResult)
+// router.post('/upload-result',createResult)
 
 module.exports = router;

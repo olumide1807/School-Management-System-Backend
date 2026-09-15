@@ -14,7 +14,7 @@ const staffSchema = new mongoose.Schema(
     },
     maritalStatus: {
       type: String,
-      enum: ["single", "married"]
+      enum: ["single", "married", "divorced", "widowed"]
     },
     emailAddress: {
       type: String,

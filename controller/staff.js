@@ -271,16 +271,31 @@ exports.updateStaff = asyncHandler(async (req, res, next) => {
       return next(new ErrorResponse("Staff not found!", 404));
     }
 
-    if (req.body.qualifications) {
-      req.body.qualifications =
-        req.body.qualifications.length >= 1
-          ? [...staff.qualifications, ...req.body.qualifications]
-          : staff.qualifications;
-    }
+    // if (req.body.qualifications) {
+    //   req.body.qualifications =
+    //     req.body.qualifications.length >= 1
+    //       ? [...staff.qualifications, ...req.body.qualifications]
+    //       : staff.qualifications;
+    // }
+
+    // Whitelist — second layer behind the Joi schema, so a future schema
+    // change can't silently widen what a staff member may edit on themselves
+    const selfEditableFields = [
+      'title', 'firstName', 'surname', 'otherName', 'gender',
+      'maritalStatus', 'phoneNumber', 'country', 'stateOfOrigin',
+      'localGovernmentArea', 'religion', 'homeAddress',
+      'nextOfKinFirstName', 'nextOfKinSurname',
+      'nextOfKinPhoneNumber', 'nextOfKinRelationship', 'profilePicture'
+    ];
+
+    const updates = {};
+    selfEditableFields.forEach((field) => {
+      if (req.body[field] !== undefined) updates[field] = req.body[field];
+    });
 
     const updatedStaff = await staffModel.findByIdAndUpdate(
       req.params.id,
-      req.body,
+      updates,
       { new: true }
     );
 
@@ -520,7 +535,7 @@ exports.createAttendance = asyncHandler(async (req, res, next) => {
     const IDs = [staffId, sessionId];
 
     // validate IDs
-    for (id of IDs) {
+    for (const id of IDs) {
       if (!isValidMongoId(id)) {
         throw new ErrorResponse("Invalid ID(s) provided!", 400);
       }
@@ -571,83 +586,83 @@ exports.createAttendance = asyncHandler(async (req, res, next) => {
 
 /////////////////////////////////////////////////////////////////////////////
 
-exports.getAllStaffAttendance = asyncHandler(async (req, res, next) => {
-  try {
-    const { user } = req;
-    const schoolId = user.schoolName ? user.id : user.schoolId;
-    const { query } = req;
-    const { staffId, sessionId, term, date, status, staffType } = query;
+// exports.getAllStaffAttendance = asyncHandler(async (req, res, next) => {
+//   try {
+//     const { user } = req;
+//     const schoolId = user.schoolName ? user.id : user.schoolId;
+//     const { query } = req;
+//     const { staffId, sessionId, term, date, status, staffType } = query;
 
-    // validate the IDs
-    const IDs = [staffId, sessionId];
-    for (id of IDs) {
-      if (id) {
-        if (!isValidMongoId(id)) {
-          throw new ErrorResponse("Invalid ID(s) provided!", 400);
-        }
-      }
-    }
+//     // validate the IDs
+//     const IDs = [staffId, sessionId];
+//     for (const id of IDs) {
+//       if (id) {
+//         if (!isValidMongoId(id)) {
+//           throw new ErrorResponse("Invalid ID(s) provided!", 400);
+//         }
+//       }
+//     }
 
-    // update the query
-    query.schoolId = schoolId;
+//     // update the query
+//     query.schoolId = schoolId;
 
-    // find
-    let attendances = await staffAttendanceModel.find(query);
+//     // find
+//     let attendances = await staffAttendanceModel.find(query);
 
-    let message = null;
+//     let message = null;
 
-    if (attendances.length < 1) {
-      message = "Staff attendance list empty!";
-      attendances = null;
-    }
+//     if (attendances.length < 1) {
+//       message = "Staff attendance list empty!";
+//       attendances = null;
+//     }
 
-    successResponse(res, 200, message, attendances);
-  } catch (error) {
-    console.error(
-      "An error occured while fetching students attendance!",
-      error
-    );
-    next(error);
-  }
-});
+//     successResponse(res, 200, message, attendances);
+//   } catch (error) {
+//     console.error(
+//       "An error occured while fetching students attendance!",
+//       error
+//     );
+//     next(error);
+//   }
+// });
 
 //////////////////////////////////////////////////////////////////////////////////////
 
-exports.getStaffAttendance = asyncHandler(async (req, res, next) => {
-  try {
-    const { user } = req;
-    const schoolId = user.schoolName ? user.id : user.schoolId;
-    const { query } = req;
-    const { term, sessionId, date, status, staffType } = query;
-    const { id } = req.params;
+// exports.getStaffAttendance = asyncHandler(async (req, res, next) => {
+//   try {
+//     const { user } = req;
+//     const schoolId = user.schoolName ? user.id : user.schoolId;
+//     const { query } = req;
+//     const { term, sessionId, date, status, staffType } = query;
+//     const { id } = req.params;
 
-    // validate the IDs
-    const IDs = [sessionId, id];
-    for (Id of IDs) {
-      if (Id) {
-        if (!isValidMongoId(Id)) {
-          throw new ErrorResponse("Invalid ID(s) provided!", 400);
-        }
-      }
-    }
+//     // validate the IDs
+//     const IDs = [sessionId, id];
+//     for (const Id of IDs) {
+//       if (Id) {
+//         if (!isValidMongoId(Id)) {
+//           throw new ErrorResponse("Invalid ID(s) provided!", 400);
+//         }
+//       }
+//     }
 
-    // update the query
-    query.schoolId = schoolId;
-    query.staffId = id;
+//     // update the query
+//     query.schoolId = schoolId;
+//     query.staffId = id;
 
-    // find
-    const attendance = await staffAttendanceModel.findOne(query);
+//     // find
+//     const attendance = await staffAttendanceModel.find(query).sort({ date: -1 });
 
-    if (!attendance) {
-      return next(new ErrorResponse("Staff attendance not found!", 404));
-    }
+//     if (!attendance || attendance.length === 0) {
+//       return successResponse(res, 200, null, []);
+//     }
 
-    successResponse(res, 200, null, attendance);
-  } catch (error) {
-    console.error("An error occured while fetching staff attendance!", error);
-    next(error);
-  }
-});
+//     successResponse(res, 200, null, attendance);
+//   } catch (error) {
+//     console.error("An error occured while fetching staff attendance!", error);
+//     next(error);
+//   }
+// });
 
 ///////////////////////////////////////////////////////////////////////////////////////////
 

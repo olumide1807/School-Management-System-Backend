@@ -1,13 +1,15 @@
 const { Router } = require("express");
+const {
+    batchUpsertResults,
+    getClassSubjectResults,
+    getStudentResult,
+} = require("../controller/result");
 const multipleProtect = require("../middleware/multipleAuth");
-const {createResult, editResult,getStudentResult} = require('../controller/result')
 
-const router = Router()
+const router = Router();
 
+router.post('/batch', multipleProtect(["super admin", "admin", "academic"]), batchUpsertResults);
+router.get('/class/:classArmId/subject/:subjectId', multipleProtect(["super admin", "admin", "academic"]), getClassSubjectResults);
+router.get('/student/:studentId', multipleProtect(["super admin", "admin", "academic"]), getStudentResult);
 
-router.post('/upload-result',createResult)
-router.put('/edit-result',editResult)
-router.get('/get-result', getStudentResult)
-
-
-module.exports = router
+module.exports = router;

@@ -586,7 +586,7 @@ exports.updateAttendance = asyncHandler(async (req, res, next) => {
 
     const { id } = req.params;
     const { user } = req;
-    const schoolId = user.schoolName ? user.id : user.schollId;
+    const schoolId = user.schoolName ? user.id : user.schoolId;
     const { status } = req.body;
 
     // check if the id is valid
@@ -599,6 +599,10 @@ exports.updateAttendance = asyncHandler(async (req, res, next) => {
       _id: id,
       schoolId
     });
+
+    if (!schoolId) {
+      return next(new ErrorResponse("Unable to resolve school context", 400));
+    }
 
     if (!attendance) {
       return next(new ErrorResponse("student attendance does not exist in your school!", 404));
@@ -677,7 +681,7 @@ exports.getAllStudentAttendance = asyncHandler(async (req, res, next) => {
 
     // validate the IDs
     const IDs = [classArmId, sessionId];
-    for (id of IDs) {
+    for (const id of IDs) {
       if (id) {
         if(!isValidMongoId(id)) {
           throw new ErrorResponse("Invalid ID(s) provided!", 400);
@@ -717,7 +721,7 @@ exports.getStudentAttendance = asyncHandler(async (req, res, next) => {
 
     // validate the IDs
     const IDs = [classArmId, sessionId, id];
-    for (Id of IDs) {
+    for (const Id of IDs) {
       if (Id) {
         if(!isValidMongoId(Id)) {
           throw new ErrorResponse("Invalid ID(s) provided!", 400);
