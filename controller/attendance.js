@@ -11,6 +11,7 @@ const {
     sessionModel,
     termModel
 } = require("../models");
+const { findClosure } = require("../utils/schoolDay");
 
 const getSchoolId = (req) =>
     req.user.schoolName ? req.user.id : req.user.schoolId;
@@ -64,7 +65,7 @@ const resolveSessionTermForDate = async (schoolId, date) => {
     const matchingTerm = allTerms.find((t) => {
         if (!t.termStartDate || !t.termEndDate) return false;
         return startOfLocalDay(t.termStartDate) <= target &&
-               target <= endOfLocalDay(t.termEndDate);
+            target <= endOfLocalDay(t.termEndDate);
     });
 
     if (!matchingTerm) return { session: null, term: null };
@@ -106,6 +107,13 @@ exports.markClassAttendance = asyncHandler(async (req, res, next) => {
         if (weekday === 0 || weekday === 6) {
             return next(new ErrorResponse(
                 "Attendance can only be marked on school days", 400
+            ));
+        }
+        // GUARD: no closure days
+        const closure = await findClosure(schoolId, targetDate);
+        if (closure) {
+            return next(new ErrorResponse(
+                `No school on this day — ${closure.name}`, 400
             ));
         }
 
@@ -181,7 +189,7 @@ exports.markClassAttendance = asyncHandler(async (req, res, next) => {
 exports.getClassAttendance = asyncHandler(async (req, res, next) => {
     try {
         const schoolId = getSchoolId(req);
-        const { classArmId, date, startDate, endDate, studentId, status } = req.query;
+        const { classArmId, termId, date, startDate, endDate, studentId, status } = req.query;
 
         const filter = { schoolId };
 
@@ -199,6 +207,12 @@ exports.getClassAttendance = asyncHandler(async (req, res, next) => {
         }
         if (status && ["present", "absent"].includes(status)) {
             filter.status = status;
+        }
+        if (termId) {
+            if (!isValidMongoId(termId)) {
+                return next(new ErrorResponse("Invalid termId", 400));
+            }
+            filter.termId = termId;
         }
 
         if (date) {

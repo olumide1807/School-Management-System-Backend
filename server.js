@@ -12,6 +12,7 @@ const Treblle = require("@treblle/express");
 
 // Session/term auto-activation scheduler
 const { startScheduler } = require("./utils/sessionScheduler");
+const { startAttendanceScheduler } = require("./utils/attendanceScheduler");
 
 // Load env vars
 dotenv.config({ path: "./config/config.env" });
@@ -104,6 +105,7 @@ app.use("/fee", feeRouter);
 app.use('/result', resultRouter)
 app.use("/assessment", assessmentRouter);
 app.use("/timetable-grid", timetableGridRouter);
+app.use("/calendar", require("./route/schoolCalendar"));
 app.use("/payment", paymentRouter);
 app.use("/attendance", attendanceRouter);
 app.use("/settings", settingsRouter);
@@ -128,4 +130,5 @@ app.listen(5002, () => {
   // Start the session/term auto-activation scheduler
   // Runs once on startup (after 5s delay) and then every hour
   startScheduler();
+  startAttendanceScheduler();
 });

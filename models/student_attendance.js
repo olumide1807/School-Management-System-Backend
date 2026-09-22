@@ -38,12 +38,19 @@ const studentAttendanceSchema = new mongoose.Schema({
     },
     recordedBy: {
         type: mongoose.Schema.Types.ObjectId,
-        required: true
+        ref: "Staff",
+        required: function () {
+            return !this.autoMarked;
+        },
     },
     recordedByName: {
         type: String,
         default: ""
-    }
+    },
+    autoMarked: {
+        type: Boolean,
+        default: false,
+    },
 }, { timestamps: true });
 
 // Prevent duplicate records for the same student on the same day

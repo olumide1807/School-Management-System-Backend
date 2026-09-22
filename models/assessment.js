@@ -5,7 +5,12 @@ const assessmentSchema = new mongoose.Schema({
         {
             name: String,
             maxScore: Number,
-            order: Number
+            order: Number,
+            source: {
+                type: String,
+                enum: ["manual", "attendance"],
+                default: "manual"
+            }
         }
     ],
     classLevel: {

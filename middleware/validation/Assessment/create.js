@@ -5,7 +5,8 @@ const schema = Joi.object({
     assessments: Joi.array().items(Joi.object({
         name: Joi.string().required(),
         maxScore: Joi.number().min(1).required(),
-        order: Joi.number()
+        order: Joi.number(),
+        source: Joi.string().valid("manual", "attendance")
     })).min(1).required()
 });
 

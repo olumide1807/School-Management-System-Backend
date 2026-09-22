@@ -47,6 +47,13 @@ exports.createAssessmentFormat = asyncHandler(async (req, res, next) => {
             ));
         }
 
+        const attendanceItems = assessments.filter((a) => a.source === "attendance");
+        if (attendanceItems.length > 1) {
+            return next(new ErrorResponse(
+                "Only one attendance assessment is allowed", 400
+            ));
+        }
+
         const exists = await assessmentModel.findOne({ schoolId, classLevel });
         if (exists) {
             return next(new ErrorResponse(
@@ -88,6 +95,13 @@ exports.editAssessmentFormat = asyncHandler(async (req, res, next) => {
             ));
         }
 
+        const attendanceItems = assessments.filter((a) => a.source === "attendance");
+        if (attendanceItems.length > 1) {
+            return next(new ErrorResponse(
+                "Only one attendance assessment is allowed", 400
+            ));
+        }
+        
         const assessment = await assessmentModel.findOne({
             schoolId,
             classLevel: classLevelId

@@ -24,4 +24,5 @@ module.exports = {
     inventoryModel: require("./inventory"),
     stockMovementModel: require("./stockMovement"),
     schoolSettingsModel: require("./schoolSettings"),
+    schoolCalendarModel: require("./schoolCalendar"),
 }
