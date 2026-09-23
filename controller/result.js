@@ -11,6 +11,7 @@ const {
     specificSubjectModel,
     studentAttendanceModel,
     schoolSettingsModel,
+    staffModel,
 } = require("../models");
 const { isValidMongoId } = require("../utils/isValidMongoObjectId");
 const gradeModel = require("../models/grade");
@@ -362,6 +363,12 @@ exports.getClassReport = asyncHandler(async (req, res, next) => {
             return next(new ErrorResponse("Class not found!", 404));
         }
 
+        const formTeacher = classArm.assignedTeacher
+            ? await staffModel
+                .findOne({ _id: classArm.assignedTeacher, schoolId })
+                .select("title firstName surname")
+            : null;
+
         const specifics = await specificSubjectModel
             .find({ classArmId, schoolId })
             .populate("subjectId", "subjectName");
@@ -631,6 +638,12 @@ exports.getClassReport = asyncHandler(async (req, res, next) => {
                 from: b.scoreRange?.from,
                 to: b.scoreRange?.to,
             })),
+            formTeacher: formTeacher
+                ? {
+                    _id: formTeacher._id,
+                    name: `${formTeacher.title ? formTeacher.title + " " : ""}${formTeacher.firstName || ""} ${formTeacher.surname || ""}`.trim(),
+                }
+                : null,
             reports,
         });
     } catch (e) {
