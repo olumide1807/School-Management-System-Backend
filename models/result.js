@@ -74,7 +74,9 @@ const resultSchema = new mongoose.Schema({
         subjects: {
             type: [subjectResultSchema],
             default: []
-        }
+        },
+        teacherComment: { type: String, default: "" },
+        principalComment: { type: String, default: "" },
     }]
 }, { timestamps: true });
 

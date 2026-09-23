@@ -10,6 +10,7 @@ const {
     assessmentModel,
     specificSubjectModel,
     studentAttendanceModel,
+    schoolSettingsModel,
 } = require("../models");
 const { isValidMongoId } = require("../utils/isValidMongoObjectId");
 const gradeModel = require("../models/grade");
@@ -376,7 +377,7 @@ exports.getClassReport = asyncHandler(async (req, res, next) => {
             ));
         }
 
-        const [term, session, students, results, format, gradeDoc, attendance] =
+        const [term, session, students, results, format, gradeDoc, attendance, settings] =
             await Promise.all([
                 termModel.findById(termId),
                 sessionModel.findById(sessionId),
@@ -387,6 +388,7 @@ exports.getClassReport = asyncHandler(async (req, res, next) => {
                 assessmentModel.findOne({ schoolId, classLevel: classArm.classLevelId }),
                 gradeModel.findOne({ schoolId }),
                 studentAttendanceModel.find({ schoolId, classArmId, termId }),
+                schoolSettingsModel.findOne({ schoolId })
             ]);
 
         if (!term) return next(new ErrorResponse("Term not found!", 404));
@@ -400,6 +402,11 @@ exports.getClassReport = asyncHandler(async (req, res, next) => {
             return band
                 ? { grade: band.grade, remark: band.remark, color: band.color }
                 : { grade: null, remark: null, color: null };
+        };
+        const bandedComment = (bands, average) => {
+            if (average === null || !bands?.length) return "";
+            const band = bands.find((b) => average >= b.from && average <= b.to);
+            return band?.text || "";
         };
 
         const definitions = format
@@ -447,6 +454,15 @@ exports.getClassReport = asyncHandler(async (req, res, next) => {
             termBlock.subjects.forEach((s) => {
                 scoreIndex[sid][String(s.subject)] = s;
             });
+        });
+        const commentIndex = {};
+        results.forEach((r) => {
+            const termBlock = r.Terms.find((t) => String(t.termId) === String(termId));
+            if (!termBlock) return;
+            commentIndex[String(r.student)] = {
+                teacher: termBlock.teacherComment || "",
+                principal: termBlock.principalComment || "",
+            };
         });
 
         // --- Effective subject result: manual scores + computed attendance ---
@@ -577,6 +593,14 @@ exports.getClassReport = asyncHandler(async (req, res, next) => {
                     ...(attendanceByStudent[sid] || { present: 0, absent: 0, total: 0 }),
                     mark: attMark,
                 },
+                comments: {
+                    teacher: commentIndex[sid]?.teacher
+                        || bandedComment(settings?.reportComments?.teacher, average),
+                    principal: commentIndex[sid]?.principal
+                        || bandedComment(settings?.reportComments?.principal, average),
+                    teacherIsOverride: !!commentIndex[sid]?.teacher,
+                    principalIsOverride: !!commentIndex[sid]?.principal,
+                },
             };
         });
 
@@ -611,6 +635,83 @@ exports.getClassReport = asyncHandler(async (req, res, next) => {
         });
     } catch (e) {
         console.error("Error building class report:", e);
+        next(e);
+    }
+});
+
+// ============================================================
+// SET A REPORT CARD COMMENT
+// PUT /result/comments
+// { studentId, termId, sessionId, teacherComment?, principalComment? }
+//
+// The form teacher writes the teacher's comment; the designated
+// principal writes the principal's. An empty string clears an
+// override and falls back to the banded default.
+// ============================================================
+exports.upsertComments = asyncHandler(async (req, res, next) => {
+    try {
+        const schoolId = getSchoolId(req);
+        const { studentId, termId, sessionId, teacherComment, principalComment } = req.body;
+
+        for (const [label, value] of [
+            ["student", studentId],
+            ["term", termId],
+            ["session", sessionId],
+        ]) {
+            if (!isValidMongoId(value)) {
+                return next(new ErrorResponse(`Invalid ${label} provided!`, 400));
+            }
+        }
+
+        const student = await studentModel.findOne({ _id: studentId, schoolId });
+        if (!student) return next(new ErrorResponse("Student not found", 404));
+
+        const classArm = await classArmModel.findOne({ _id: student.classArmId, schoolId });
+        const isFormTeacher =
+            String(classArm?.assignedTeacher || "") === String(req.user.id);
+
+        const settings = await schoolSettingsModel.findOne({ schoolId });
+        const isPrincipal = String(settings?.principalId || "") === String(req.user.id);
+
+        if (teacherComment !== undefined && !isAdminRole(req) && !isFormTeacher) {
+            return next(new ErrorResponse(
+                "Only the form teacher can write the teacher's comment", 403
+            ));
+        }
+        if (principalComment !== undefined && !isPrincipal && !req.user.schoolName) {
+            return next(new ErrorResponse(
+                "Only the principal can write the principal's comment", 403
+            ));
+        }
+
+        let doc = await resultModel.findOne({
+            school: schoolId, student: studentId, session: sessionId,
+        });
+
+        if (!doc) {
+            doc = await resultModel.create({
+                school: schoolId,
+                student: studentId,
+                session: sessionId,
+                classLevel: classArm.classLevelId,
+                classArm: classArm._id,
+                Terms: [{ termId, subjects: [] }],
+            });
+        }
+
+        let termBlock = doc.Terms.find((t) => String(t.termId) === String(termId));
+        if (!termBlock) {
+            doc.Terms.push({ termId, subjects: [] });
+            termBlock = doc.Terms[doc.Terms.length - 1];
+        }
+
+        if (teacherComment !== undefined) termBlock.teacherComment = teacherComment;
+        if (principalComment !== undefined) termBlock.principalComment = principalComment;
+
+        await doc.save();
+        successResponse(res, 200, "Comment saved", null);
+    } catch (e) {
+        console.error("Error saving comment:", e);
         next(e);
     }
 });
