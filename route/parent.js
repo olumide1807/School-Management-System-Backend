@@ -3,12 +3,14 @@ const express = require("express");
 const multipleProtect = require("../middleware/multipleAuth");
 const router = express.Router();
 
-const { createParent, editParent, linkStudent, deleteParent, getAllParents, updateParent } = require("../controller/parent")
+const { createParent, editParent, linkStudent, deleteParent, getAllParents, updateParent, resetParentPassword } = require("../controller/parent")
 
 router.put('/:id', multipleProtect(["super admin", "admin"]), updateParent);
 
 // create parent
 router.post("/", multipleProtect(["super admin", "admin"]), createParent);
+
+router.put("/:id/reset-password", multipleProtect(["super admin", "admin"]), resetParentPassword);
 
 // edit parent
 router.put("/:id", multipleProtect(["super admin", "admin"]), editParent);

@@ -62,7 +62,8 @@ const studentSchema = new mongoose.Schema({
     },
 
     // ===== SYSTEM =====
-    password: { type: String, required: true },
+    password: { type: String, required: true, select: false },
+    mustChangePassword: { type: Boolean, default: true },
     status: { type: String, enum: ["active", "deactivated"], required: true, default: "active" },
     schoolId: { type: mongoose.Schema.Types.ObjectId, ref: "SuperAdmin" },
     resetPasswordToken: String,

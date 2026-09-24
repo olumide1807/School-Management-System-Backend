@@ -10,14 +10,14 @@ const parentSchema = new mongoose.Schema({
         default: "prefer not to say"
     },
     maritalStatus: {
-      type: String,
-      enum: ["single", "married"]
+        type: String,
+        enum: ["single", "married"]
     },
     email: {
         type: String,
         // Add email validation using a regular expression (regex)
         validate: {
-            validator: function(value) {
+            validator: function (value) {
                 // Regular expression for a valid email address
                 const emailRegex = /^[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,4}$/;
                 return emailRegex.test(value);
@@ -42,8 +42,10 @@ const parentSchema = new mongoose.Schema({
         type: Boolean,
         default: false
     },
+    password: { type: String, select: false },
+    mustChangePassword: { type: Boolean, default: true },
     resetPasswordToken: String,
-      resetPasswordExpire: Date,
+    resetPasswordExpire: Date,
 }, { timestamps: true });
 
 const Parent = mongoose.model('Parent', parentSchema);

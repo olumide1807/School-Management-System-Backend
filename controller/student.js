@@ -10,6 +10,7 @@ const { linkParent } = require("../utils/linkParent");
 const { successResponse } = require("../utils/successResponse");
 const { isValidMongoId } = require("../utils/isValidMongoObjectId");
 const cloudinary = require("../utils/cloudinary");
+const { GeneratePassword } = require("../utils");
 
 // models
 const {
@@ -139,7 +140,7 @@ exports.registerStudent = asyncHandler(async (req, res, next) => {
       stateOfOrigin,
       localGovernmentArea,
       address,
-      password: studentId,
+      password: await GeneratePassword(studentId),
       schoolId,
       guardians: [],
       photo: photoUrl,

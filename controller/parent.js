@@ -7,6 +7,9 @@ const ErrorResponse = require("../utils/errorResponse");
 const { createParent } = require("../utils/createParent");
 const { successResponse } = require("../utils/successResponse");
 
+const { GeneratePassword } = require("../utils");
+const sendEmail = require("../utils/sendgrid");
+
 // models
 const {
     studentModel,
@@ -27,11 +30,25 @@ exports.createParent = asyncHandler(async (req, res, next) => {
         const { email, studentID, relationship } = req.body;
         req.body.schoolId = schoolId;
 
+        // Parents log in with their email, so they need a password.
+        // Generated here and emailed; they must change it on first login.
+        const plainPassword = Math.random().toString(36).substring(2, 10);
+        req.body.password = await GeneratePassword(plainPassword);
+
         // create parent
         const parent = await createParent(email, schoolId, parentModel, req.body);
 
         if (!parent) {
             return next(new ErrorResponse(`parent with this email: ${email} already exists in your school`, 400))
+        }
+
+        try {
+            const message = `An account has been created for you on the school portal.\nYour email is ${parent.email} and your password is ${plainPassword}.\nYou'll be asked to change it when you first sign in.`;
+            // await sendEmail(parent.email, "School Portal - Account Created", message, `<p>${message}</p>`);
+            // TODO: email this once SendGrid is configured
+            console.log(`Parent created. Email: ${parent.email} · Password: ${plainPassword}`);
+        } catch (emailErr) {
+            console.log("Parent email failed. Password:", plainPassword);
         }
 
         if (studentID) {
@@ -58,8 +75,9 @@ exports.createParent = asyncHandler(async (req, res, next) => {
         return res.status(201).json({
             success: true,
             message: "parent has been created successfully",
-            data: parent
-        })
+            data: parent,
+            initialPassword: plainPassword,
+        });
 
     } catch (e) {
         console.error(`Error creating parent: ${e}`);
@@ -243,5 +261,31 @@ exports.updateParent = asyncHandler(async (req, res, next) => {
     } catch (error) {
         console.error("Error updating parent:", error);
         next(error);
+    }
+});
+
+// PUT /parent/:id/reset-password — admin-triggered
+exports.resetParentPassword = asyncHandler(async (req, res, next) => {
+    try {
+        const schoolId = req.user.schoolName ? req.user.id : req.user.schoolId;
+        const parent = await parentModel.findOne({ _id: req.params.id, schoolId });
+        if (!parent) return next(new ErrorResponse("Parent not found", 404));
+
+        const plainPassword = Math.random().toString(36).substring(2, 10);
+        parent.password = await GeneratePassword(plainPassword);
+        parent.mustChangePassword = true;
+        await parent.save();
+
+        try {
+            const message = `Your school portal password has been reset.\nYour new password is ${plainPassword}.`;
+            await sendEmail(parent.email, "School Portal - Password Reset", message, `<p>${message}</p>`);
+        } catch (e) {
+            console.log("Reset email failed. Password:", plainPassword);
+        }
+
+        successResponse(res, 200, "Password reset and emailed", { newPassword: plainPassword });
+    } catch (e) {
+        console.error("Error resetting parent password:", e);
+        next(e);
     }
 });
