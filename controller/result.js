@@ -12,6 +12,7 @@ const {
     studentAttendanceModel,
     schoolSettingsModel,
     staffModel,
+    resultPublicationModel,
 } = require("../models");
 const { isValidMongoId } = require("../utils/isValidMongoObjectId");
 const gradeModel = require("../models/grade");
@@ -384,7 +385,7 @@ exports.getClassReport = asyncHandler(async (req, res, next) => {
             ));
         }
 
-        const [term, session, students, results, format, gradeDoc, attendance, settings] =
+        const [term, session, students, results, format, gradeDoc, attendance, settings, publication] =
             await Promise.all([
                 termModel.findById(termId),
                 sessionModel.findById(sessionId),
@@ -395,7 +396,10 @@ exports.getClassReport = asyncHandler(async (req, res, next) => {
                 assessmentModel.findOne({ schoolId, classLevel: classArm.classLevelId }),
                 gradeModel.findOne({ schoolId }),
                 studentAttendanceModel.find({ schoolId, classArmId, termId }),
-                schoolSettingsModel.findOne({ schoolId })
+                schoolSettingsModel.findOne({ schoolId }),
+                resultPublicationModel.findOne({
+                    schoolId, classArm: classArmId, term: termId, session: sessionId, 
+                }),
             ]);
 
         if (!term) return next(new ErrorResponse("Term not found!", 404));
@@ -645,6 +649,10 @@ exports.getClassReport = asyncHandler(async (req, res, next) => {
                 }
                 : null,
             reports,
+
+            publication: publication
+                ? { published: true, publishedAt: publication.publishedAt }
+                : { published: false, publishedAt: null },
         });
     } catch (e) {
         console.error("Error building class report:", e);
@@ -728,3 +736,136 @@ exports.upsertComments = asyncHandler(async (req, res, next) => {
         next(e);
     }
 });
+
+// ============================================================
+// APPEND TO controller/result.js
+//
+// Add resultPublicationModel to the models destructure at the top.
+// ============================================================
+
+// ============================================================
+// PUBLISH A CLASS'S RESULTS FOR A TERM
+// POST /result/publish
+// { classArmId, termId, sessionId }
+//
+// Until this is done, students and parents see nothing — a report
+// card assembled mid-marking would show a position computed from two
+// subjects and would shift under them all term.
+//
+// Publishing an incomplete set is allowed. Schools have real reasons
+// to release results before every subject is in, and the response
+// reports what was missing so the UI can say so.
+// ============================================================
+exports.publishResults = asyncHandler(async (req, res, next) => {
+    try {
+        const schoolId = getSchoolId(req);
+        const { classArmId, termId, sessionId } = req.body;
+
+        for (const [label, value] of [
+            ["class arm", classArmId],
+            ["term", termId],
+            ["session", sessionId],
+        ]) {
+            if (!isValidMongoId(value)) {
+                return next(new ErrorResponse(`Invalid ${label} provided!`, 400));
+            }
+        }
+
+        // Publication is a school decision, not a teacher's
+        if (!isAdminRole(req)) {
+            return next(new ErrorResponse(
+                "Only an administrator can publish results", 403
+            ));
+        }
+
+        const classArm = await classArmModel.findOne({ _id: classArmId, schoolId });
+        if (!classArm) return next(new ErrorResponse("Class not found!", 404));
+
+        const existing = await resultPublicationModel.findOne({
+            schoolId, classArm: classArmId, term: termId, session: sessionId,
+        });
+
+        if (existing) {
+            return next(new ErrorResponse(
+                "These results are already published", 400
+            ));
+        }
+
+        await resultPublicationModel.create({
+            schoolId,
+            classArm: classArmId,
+            term: termId,
+            session: sessionId,
+            publishedBy: req.user.id,
+        });
+
+        successResponse(res, 201, "Results published", null);
+    } catch (e) {
+        console.error("Error publishing results:", e);
+        next(e);
+    }
+});
+
+// ============================================================
+// UNPUBLISH
+// DELETE /result/publish
+// { classArmId, termId, sessionId }
+//
+// Mistakes happen, and pulling a result back beats leaving a wrong
+// one in front of families.
+// ============================================================
+exports.unpublishResults = asyncHandler(async (req, res, next) => {
+    try {
+        const schoolId = getSchoolId(req);
+        const { classArmId, termId, sessionId } = req.body;
+
+        for (const [label, value] of [
+            ["class arm", classArmId],
+            ["term", termId],
+            ["session", sessionId],
+        ]) {
+            if (!isValidMongoId(value)) {
+                return next(new ErrorResponse(`Invalid ${label} provided!`, 400));
+            }
+        }
+
+        if (!isAdminRole(req)) {
+            return next(new ErrorResponse(
+                "Only an administrator can unpublish results", 403
+            ));
+        }
+
+        const removed = await resultPublicationModel.findOneAndDelete({
+            schoolId, classArm: classArmId, term: termId, session: sessionId,
+        });
+
+        if (!removed) {
+            return next(new ErrorResponse("These results aren't published", 404));
+        }
+
+        successResponse(res, 200, "Results withdrawn", null);
+    } catch (e) {
+        console.error("Error unpublishing results:", e);
+        next(e);
+    }
+});
+
+
+// ============================================================
+// ALSO: add the publication state to getClassReport
+// ============================================================
+//
+// 1. Add to the Promise.all array (and its destructure, at the end):
+//
+//        resultPublicationModel.findOne({
+//            schoolId, classArm: classArmId, term: termId, session: sessionId,
+//        }),
+//
+//    destructured as `publication`.
+//
+// 2. Add to the successResponse payload, beside `formTeacher`:
+//
+//        publication: publication
+//            ? { published: true, publishedAt: publication.publishedAt }
+//            : { published: false, publishedAt: null },
+//
