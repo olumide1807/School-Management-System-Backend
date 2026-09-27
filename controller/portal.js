@@ -59,15 +59,14 @@ exports.getStudentPortalHome = asyncHandler(async (req, res, next) => {
                 studentId,
                 termId: activeTerm._id,
             });
-            const present = records.filter((r) => r.status === "present").length;
-            const absent = records.filter((r) => r.status === "absent").length;
+            const present = records.filter((r) => r.status === "present" && !r.autoMarked).length;
+            const absent = records.filter((r) => r.status === "absent" && !r.autoMarked).length;
+            const scored = present + absent;
             attendance = {
                 present,
                 absent,
-                total: records.length,
-                percentage: records.length
-                    ? Math.round((present / records.length) * 100)
-                    : null,
+                total: scored,
+                percentage: scored > 0 ? Math.round((present / scored) * 100) : null,
             };
         }
 
