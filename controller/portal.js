@@ -13,6 +13,7 @@ const {
     staffModel,
     resultPublicationModel,
     resultModel,
+    parentModel,
 } = require("../models");
 const { buildClassReport } = require("../utils/buildClassReport");
 const { isValidMongoId } = require("../utils/isValidMongoObjectId");
@@ -397,6 +398,125 @@ exports.getStudentAttendance = asyncHandler(async (req, res, next) => {
         });
     } catch (e) {
         console.error("Error loading student attendance:", e);
+        next(e);
+    }
+});
+
+exports.getParentPortalHome = asyncHandler(async (req, res, next) => {
+    try {
+        const parentId = req.user.id;
+
+        const parent = await parentModel
+            .findById(parentId)
+            .select("-password -resetPasswordToken -resetPasswordExpire");
+
+        if (!parent) return next(new ErrorResponse("Parent not found", 404));
+
+        const schoolId = parent.schoolId;
+
+        const [children, activeTerm] = await Promise.all([
+            studentModel
+                .find({ "guardians.parentId": parentId, schoolId })
+                .select("firstName surName otherName studentID photo classArmId guardians status"),
+            termModel.findOne({ schoolId, currentTerm: true }),
+        ]);
+
+        const session = activeTerm
+            ? await sessionModel.findById(activeTerm.sessionId)
+            : null;
+
+        // Class labels for every arm the children are in
+        const armIds = [...new Set(children.map((c) => String(c.classArmId)).filter(Boolean))];
+        const arms = await classArmModel.find({ _id: { $in: armIds } });
+        const levels = await classLevelModel.find({
+            _id: { $in: [...new Set(arms.map((a) => String(a.classLevelId)))] },
+        });
+
+        const armLabel = (armId) => {
+            const arm = arms.find((a) => String(a._id) === String(armId));
+            if (!arm) return null;
+            const level = levels.find((l) => String(l._id) === String(arm.classLevelId));
+            return `${level?.levelShortName || ""} ${arm.armName?.toUpperCase() || ""}`.trim();
+        };
+
+        const enriched = await Promise.all(
+            children.map(async (child) => {
+                const guardian = child.guardians?.find(
+                    (g) => String(g.parentId) === String(parentId)
+                );
+
+                let attendance = { present: 0, absent: 0, total: 0, percentage: null };
+                let resultsPublished = false;
+
+                if (activeTerm) {
+                    const records = await studentAttendanceModel.find({
+                        schoolId,
+                        studentId: child._id,
+                        termId: activeTerm._id,
+                    });
+                    // Days the register was actually taken — a missed
+                    // register is the school's omission, not the child's
+                    const present = records.filter(
+                        (r) => r.status === "present" && !r.autoMarked
+                    ).length;
+                    const absent = records.filter(
+                        (r) => r.status === "absent" && !r.autoMarked
+                    ).length;
+                    const scored = present + absent;
+                    attendance = {
+                        present,
+                        absent,
+                        total: scored,
+                        percentage: scored > 0 ? Math.round((present / scored) * 100) : null,
+                    };
+
+                    if (child.classArmId) {
+                        const publication = await resultPublicationModel.findOne({
+                            schoolId,
+                            classArm: child.classArmId,
+                            term: activeTerm._id,
+                            session: activeTerm.sessionId,
+                        });
+                        resultsPublished = !!publication;
+                    }
+                }
+
+                return {
+                    _id: child._id,
+                    firstName: child.firstName,
+                    surName: child.surName,
+                    otherName: child.otherName,
+                    studentID: child.studentID,
+                    photo: child.photo,
+                    status: child.status,
+                    relationship: guardian?.relationship || null,
+                    classLabel: armLabel(child.classArmId),
+                    attendance,
+                    resultsPublished,
+                };
+            })
+        );
+
+        // Announcements addressed to families
+        const today = new Date();
+        const announcements = await announcementModel
+            .find({ schoolId, visibleTo: "student", endDate: { $gte: today } })
+            .sort({ important: -1, startDate: 1 })
+            .limit(5);
+
+        successResponse(res, 200, null, {
+            parent,
+            children: enriched,
+            term: activeTerm
+                ? { _id: activeTerm._id, termName: activeTerm.termName }
+                : null,
+            session: session
+                ? { _id: session._id, sessionName: session.sessionName }
+                : null,
+            announcements,
+        });
+    } catch (e) {
+        console.error("Error loading parent portal:", e);
         next(e);
     }
 });
