@@ -111,7 +111,7 @@ app.use("/attendance", attendanceRouter);
 app.use("/settings", settingsRouter);
 app.use("/staff-attendance", staffAttendanceRouter);
 app.use("/auth", authRouter);
-
+app.use("/portal", require("./route/portal"));
 
 // debug route
 app.get("/debug-sentry", function mainHandler(req, res) {
