@@ -205,16 +205,28 @@ const loadStudentResults = async (schoolId, studentId, classArmId, query) => {
         chosen = match;
     }
 
+    // From here on, "nothing to show" is an empty state, not a 404. On the
+    // family endpoints 404 means only "no such student / not your child",
+    // and a parent must not be able to confuse the two.
     const full = await buildClassReport(schoolId, classArmId, chosen.termId, chosen.sessionId);
-    if (!full) return { error: new ErrorResponse("Could not load the result", 404) };
+    if (!full) {
+        // A published term whose report can't be built is broken data — a
+        // missing term/session document, or an arm outside this school —
+        // not an ordinary empty result, so make it visible in the logs
+        console.error("Published result could not be built:", {
+            studentId: String(studentId),
+            classArm: String(classArmId),
+            termId: chosen.termId,
+            sessionId: chosen.sessionId,
+        });
+        return { data: { available, report: null } };
+    }
 
     // Take only this student's entry — the rest of the class is not theirs to see
     const mine = full.reports.find(
         (r) => String(r.student._id) === String(studentId)
     );
-    if (!mine) {
-        return { error: new ErrorResponse("No result found for this term", 404) };
-    }
+    if (!mine) return { data: { available, report: null } };
 
     return {
         data: {
