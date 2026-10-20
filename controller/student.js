@@ -288,7 +288,7 @@ exports.linkNewParent = asyncHandler(async (req, res, next) => {
       return next(new ErrorResponse(error.details[0].message, 400));
     }
 
-    const schoolId = req.user.schoolName ? req.user : req.user.schoolId;
+    const schoolId = req.user.schoolName ? req.user.id : req.user.schoolId;
     const studentId = req.params.id;
 
     // Check if student exists in the school
