@@ -1,6 +1,6 @@
 // middlewares
 const { asyncHandler } = require("../middleware");
-const { validateCreateParent, validateLinkStudent, validateEditParent } = require("../middleware/validation");
+const { validateCreateParent, validateLinkStudent } = require("../middleware/validation");
 
 // utils
 const ErrorResponse = require("../utils/errorResponse");
@@ -83,42 +83,6 @@ exports.createParent = asyncHandler(async (req, res, next) => {
     } catch (e) {
         console.error(`Error creating parent: ${e}`);
         return next(new ErrorResponse("Error creating parent, please try again later", 500));
-    }
-})
-
-exports.editParent = asyncHandler(async (req, res, next) => {
-    try {
-        // validate request body
-        const { error } = validateEditParent(req.body);
-
-        if (error) return next(new ErrorResponse(error.details[0].message, 400))
-
-        // extract the schoolId
-        const schoolId = req.user.schoolName ? req.user.id : req.user.schoolId;
-
-        // destructure the query params
-        const { id } = req.params;
-
-        // does the parent exist?
-        const parent = await parentModel.findOne({
-            _id: id,
-            schoolId
-        })
-
-        // no? return error
-        if (!parent) return next(new ErrorResponse(`parent with id: ${id} doesn't exist`, 400));
-
-        // otherwise, update
-        await parentModel.findByIdAndUpdate(id, req.body);
-
-        res.status(200).json({
-            success: true,
-            message: "Parent has been updated successfully"
-        })
-
-    } catch (e) {
-        console.error(`Error editing parent: ${e}`);
-        return next(new ErrorResponse("Error editing parent, please try again later", 500));
     }
 })
 
