@@ -30,12 +30,9 @@ exports.createParent = asyncHandler(async (req, res, next) => {
         const { email, studentID, relationship } = req.body;
         req.body.schoolId = schoolId;
 
-        // Parents log in with their email, so they need a password.
-        // Generated here and emailed; they must change it on first login.
-        const plainPassword = Math.random().toString(36).substring(2, 10);
-        req.body.password = await GeneratePassword(plainPassword);
-
-        // create parent
+        // Parents log in with their email, so they need a password. The util
+        // generates and hashes it; parent.plainPassword is that same value.
+        // They must change it on first login.
         const parent = await createParent(email, schoolId, parentModel, req.body);
 
         if (!parent) {
@@ -43,12 +40,12 @@ exports.createParent = asyncHandler(async (req, res, next) => {
         }
 
         try {
-            const message = `An account has been created for you on the school portal.\nYour email is ${parent.email} and your password is ${plainPassword}.\nYou'll be asked to change it when you first sign in.`;
+            const message = `An account has been created for you on the school portal.\nYour email is ${parent.email} and your password is ${parent.plainPassword}.\nYou'll be asked to change it when you first sign in.`;
             // await sendEmail(parent.email, "School Portal - Account Created", message, `<p>${message}</p>`);
             // TODO: email this once SendGrid is configured
-            console.log(`Parent created. Email: ${parent.email} · Password: ${plainPassword}`);
+            console.log(`Parent created. Email: ${parent.email} · Password: ${parent.plainPassword}`);
         } catch (emailErr) {
-            console.log("Parent email failed. Password:", plainPassword);
+            console.log("Parent email failed. Password:", parent.plainPassword);
         }
 
         if (studentID) {
@@ -76,7 +73,7 @@ exports.createParent = asyncHandler(async (req, res, next) => {
             success: true,
             message: "parent has been created successfully",
             data: parent,
-            initialPassword: plainPassword,
+            initialPassword: parent.plainPassword,
         });
 
     } catch (e) {

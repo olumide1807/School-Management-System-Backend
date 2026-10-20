@@ -11,7 +11,9 @@ const createParent = async (email, schoolId, model, data) => {
         return null;
     }
 
-    // inside createParent, before the create call:
+    // The only place a parent's initial password is generated. Callers read
+    // it back from newParent.plainPassword, so what they report is exactly
+    // what was hashed — they must not set data.password themselves.
     const plainPassword = Math.random().toString(36).substring(2, 10);
     data.password = await GeneratePassword(plainPassword);
 
@@ -19,12 +21,6 @@ const createParent = async (email, schoolId, model, data) => {
     const newParent = await model.create(data);
     newParent.plainPassword = plainPassword;   // in memory only, not saved
     return newParent;
-    return res.status(201).json({
-        success: true,
-        message: "parent has been created successfully",
-        data: parent,
-        initialPassword: parent.plainPassword,
-    });
 };
 
 module.exports = { createParent }
