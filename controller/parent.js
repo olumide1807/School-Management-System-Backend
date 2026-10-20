@@ -69,10 +69,14 @@ exports.createParent = asyncHandler(async (req, res, next) => {
             await student.save();
         }
 
+        // select:false on password only applies to queries — the document
+        // create() returns still carries the hash, so strip it here
+        const { password: _hash, ...safeParent } = parent.toObject();
+
         return res.status(201).json({
             success: true,
             message: "parent has been created successfully",
-            data: parent,
+            data: safeParent,
             initialPassword: parent.plainPassword,
         });
 

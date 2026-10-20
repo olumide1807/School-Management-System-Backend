@@ -252,11 +252,15 @@ exports.registerStudent = asyncHandler(async (req, res, next) => {
 
     await newStudent.save();
 
+    // select:false on password only applies to queries — a document built
+    // and saved here still carries the hash, so strip it before responding
+    const { password: _hash, ...safeStudent } = newStudent.toObject();
+
     res.status(201).json({
       success: true,
       message: `student created and linked successfully`,
       data: {
-        student: newStudent,
+        student: safeStudent,
         parentId,
       },
       // Named for the parent so it can't be mistaken for the student's own;
