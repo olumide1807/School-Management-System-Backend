@@ -157,6 +157,9 @@ exports.registerStudent = asyncHandler(async (req, res, next) => {
     };
 
     let parentId = null;
+    // Set only when this request creates a new parent; linking an existing
+    // parent doesn't touch their password
+    let parentInitialPassword = null;
 
     // Only process parent if parentID or parent details are provided
     if (parentID && parentID.trim() !== "") {
@@ -231,6 +234,13 @@ exports.registerStudent = asyncHandler(async (req, res, next) => {
 
       parentId = parent.id;
 
+      // Same as POST /parent: until SendGrid is configured, the admin hands
+      // this over, so it's logged and returned. parent.plainPassword is the
+      // value createParent hashed.
+      parentInitialPassword = parent.plainPassword;
+      // TODO: email this once SendGrid is configured
+      console.log(`Parent created. Email: ${parent.email} · Password: ${parent.plainPassword}`);
+
       object.guardians.push({
         parentId,
         relationship
@@ -249,6 +259,9 @@ exports.registerStudent = asyncHandler(async (req, res, next) => {
         student: newStudent,
         parentId,
       },
+      // Named for the parent so it can't be mistaken for the student's own;
+      // null when no new parent was created
+      parentInitialPassword,
     });
   } catch (error) {
     console.error(`error from registering student: ${error}`);
