@@ -440,7 +440,7 @@ exports.resetStudentPassword = asyncHandler(async (req, res, next) => {
 
     // Always random. A student's first password was their student ID, which
     // is printed on their card; a reset must never hand that back. (The
-    // generator's base64url output can't contain the "/" in a student ID.)
+    // generator's alphabet has no "/", so it can't produce a student ID.)
     const plainPassword = generatePortalPassword();
     student.password = await GeneratePassword(plainPassword);
     student.mustChangePassword = true;

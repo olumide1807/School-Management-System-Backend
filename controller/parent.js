@@ -242,11 +242,17 @@ exports.resetParentPassword = asyncHandler(async (req, res, next) => {
         parent.mustChangePassword = true;
         await parent.save();
 
-        try {
-            const message = `Your school portal password has been reset.\nYour new password is ${plainPassword}.`;
-            await sendEmail(parent.email, "School Portal - Password Reset", message, `<p>${message}</p>`);
-        } catch (e) {
-            console.log("Reset email failed. Password:", plainPassword);
+        // Same as the student reset: only try when there's an address, and
+        // never let delivery decide whether the reset succeeded — it already
+        // has. The password itself is never logged.
+        if (parent.email) {
+            try {
+                const message = `Your school portal password has been reset.\nYour new password is ${plainPassword}.`;
+                const sent = await sendEmail(parent.email, "School Portal - Password Reset", message, `<p>${message}</p>`);
+                if (!sent?.status) console.error(`Reset email to parent ${parent._id} was not delivered`);
+            } catch (e) {
+                console.error(`Reset email to parent ${parent._id} failed: ${e}`);
+            }
         }
 
         // Delivery isn't mentioned: SendGrid isn't configured, and the admin
