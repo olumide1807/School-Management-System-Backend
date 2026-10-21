@@ -1,10 +1,5 @@
-const crypto = require("crypto");
 const { GeneratePassword } = require("./index");   // or wherever it lives
-
-// A parent's initial or reset password. Math.random is not
-// cryptographically random; 6 random bytes in base64url is exactly 8
-// characters ([A-Za-z0-9_-]) with 48 bits of entropy and no padding.
-const generateParentPassword = () => crypto.randomBytes(6).toString("base64url");
+const { generatePortalPassword } = require("./generatePortalPassword");
 
 const createParent = async (email, schoolId, model, data) => {
     // check if the parent exists in the school by email address
@@ -20,7 +15,7 @@ const createParent = async (email, schoolId, model, data) => {
     // The only place a parent's initial password is generated. Callers read
     // it back from newParent.plainPassword, so what they report is exactly
     // what was hashed — they must not set data.password themselves.
-    const plainPassword = generateParentPassword();
+    const plainPassword = generatePortalPassword();
     data.password = await GeneratePassword(plainPassword);
 
     // create a new parent using the tabled info
@@ -29,4 +24,4 @@ const createParent = async (email, schoolId, model, data) => {
     return newParent;
 };
 
-module.exports = { createParent, generateParentPassword }
+module.exports = { createParent }

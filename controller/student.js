@@ -11,6 +11,8 @@ const { successResponse } = require("../utils/successResponse");
 const { isValidMongoId } = require("../utils/isValidMongoObjectId");
 const cloudinary = require("../utils/cloudinary");
 const { GeneratePassword } = require("../utils");
+const { generatePortalPassword } = require("../utils/generatePortalPassword");
+const sendEmail = require("../utils/sendgrid");
 
 // models
 const {
@@ -421,6 +423,49 @@ exports.activateStudent = asyncHandler(async(req, res, next) => {
     return next(new ErrorResponse("Error activating student, please try again later", 500));
   }
 })
+
+/////////////////////////////////////////////////////////////////////////////////////
+
+// PUT /student/:id/reset-password — admin-triggered. Mirrors
+// resetParentPassword, except that email is optional for students.
+exports.resetStudentPassword = asyncHandler(async (req, res, next) => {
+  try {
+    const schoolId = req.user.schoolName ? req.user.id : req.user.schoolId;
+    const { id } = req.params;
+
+    if (!isValidMongoId(id)) return next(new ErrorResponse("Student not found", 404));
+
+    const student = await studentModel.findOne({ _id: id, schoolId });
+    if (!student) return next(new ErrorResponse("Student not found", 404));
+
+    // Always random. A student's first password was their student ID, which
+    // is printed on their card; a reset must never hand that back. (The
+    // generator's base64url output can't contain the "/" in a student ID.)
+    const plainPassword = generatePortalPassword();
+    student.password = await GeneratePassword(plainPassword);
+    student.mustChangePassword = true;
+    await student.save();
+
+    // Many students have no email. Only try when there is one, and never let
+    // delivery decide whether the reset succeeded — it already has.
+    if (student.email) {
+      try {
+        const message = `Your school portal password has been reset.\nYour new password is ${plainPassword}.`;
+        const sent = await sendEmail(student.email, "School Portal - Password Reset", message, `<p>${message}</p>`);
+        if (!sent?.status) console.error(`Reset email to student ${student._id} was not delivered`);
+      } catch (e) {
+        console.error(`Reset email to student ${student._id} failed: ${e}`);
+      }
+    }
+
+    // Only the new plain password goes back — never the document, so the
+    // hash can't leak
+    successResponse(res, 200, "Password has been reset", { newPassword: plainPassword });
+  } catch (e) {
+    console.error(`Error resetting student password: ${e}`);
+    return next(new ErrorResponse("Error resetting password, please try again later", 500));
+  }
+});
 
 /////////////////////////////////////////////////////////////////////////////////////
 

@@ -4,7 +4,8 @@ const { validateCreateParent, validateLinkStudent } = require("../middleware/val
 
 // utils
 const ErrorResponse = require("../utils/errorResponse");
-const { createParent, generateParentPassword } = require("../utils/createParent");
+const { createParent } = require("../utils/createParent");
+const { generatePortalPassword } = require("../utils/generatePortalPassword");
 const { successResponse } = require("../utils/successResponse");
 
 const { GeneratePassword } = require("../utils");
@@ -236,7 +237,7 @@ exports.resetParentPassword = asyncHandler(async (req, res, next) => {
         const parent = await parentModel.findOne({ _id: req.params.id, schoolId });
         if (!parent) return next(new ErrorResponse("Parent not found", 404));
 
-        const plainPassword = generateParentPassword();
+        const plainPassword = generatePortalPassword();
         parent.password = await GeneratePassword(plainPassword);
         parent.mustChangePassword = true;
         await parent.save();
@@ -248,7 +249,9 @@ exports.resetParentPassword = asyncHandler(async (req, res, next) => {
             console.log("Reset email failed. Password:", plainPassword);
         }
 
-        successResponse(res, 200, "Password reset and emailed", { newPassword: plainPassword });
+        // Delivery isn't mentioned: SendGrid isn't configured, and the admin
+        // UI shows this text alongside the password it hands over
+        successResponse(res, 200, "Password has been reset", { newPassword: plainPassword });
     } catch (e) {
         console.error("Error resetting parent password:", e);
         next(e);
