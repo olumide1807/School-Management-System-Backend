@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const addressSchema = require('./addressSchema');
 
 const parentSchema = new mongoose.Schema({
     title: String,
@@ -34,6 +35,11 @@ const parentSchema = new mongoose.Schema({
         required: true
     },
     homeAddress: String,
+    // Same shape as a student's address. Optional, unlike on students:
+    // parents created before this field existed have none, and requiring
+    // it would make every save() on them (e.g. a password reset) fail.
+    address: addressSchema,
+    country: String,
     schoolId: {
         type: mongoose.Schema.Types.ObjectId,
         ref: "SuperAdmin"

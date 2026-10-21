@@ -1,13 +1,5 @@
 const mongoose = require('mongoose');
-
-const addressSchema = new mongoose.Schema({
-    number: Number,
-    street: String,
-    city: String,
-    state: String,
-    postalCode: String,
-    country: String
-});
+const addressSchema = require('./addressSchema');
 
 const studentSchema = new mongoose.Schema({
     studentID: {
