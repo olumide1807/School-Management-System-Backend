@@ -64,7 +64,7 @@ exports.createParent = asyncHandler(async (req, res, next) => {
             student.guardians.push({ parentId: parent.id, relationship });
 
             // update the parent
-            parent.type = "linked";
+            parent.isLinked = true;
             await parent.save();
 
             await student.save();
@@ -128,7 +128,7 @@ exports.linkStudent = asyncHandler(async (req, res, next) => {
         });
 
         // update parent
-        parent.type = "linked";
+        parent.isLinked = true;
         await parent.save()
 
         // save to the database

@@ -17,7 +17,7 @@ const linkParent = async (parentId, schoolId, relationship, object) => {
 
     object.guardians.push(guardian);
 
-    parent.type = "linked";
+    parent.isLinked = true;
 
     await parent.save()
 

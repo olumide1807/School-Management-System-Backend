@@ -216,7 +216,7 @@ exports.registerStudent = asyncHandler(async (req, res, next) => {
         gender: parentGender,
         country: parentCountry,
         schoolId,
-        type: "linked"
+        isLinked: true
       };
 
       const parent = await createParent(
