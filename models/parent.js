@@ -34,7 +34,6 @@ const parentSchema = new mongoose.Schema({
         type: String,
         required: true
     },
-    homeAddress: String,
     // Same shape as a student's address. Optional, unlike on students:
     // parents created before this field existed have none, and requiring
     // it would make every save() on them (e.g. a password reset) fail.
