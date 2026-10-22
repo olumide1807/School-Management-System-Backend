@@ -16,6 +16,7 @@ const {
     parentModel,
 } = require("../models");
 const { buildClassReport } = require("../utils/buildClassReport");
+const { buildFeeStatement } = require("../utils/buildFeeStatement");
 const { isValidMongoId } = require("../utils/isValidMongoObjectId");
 const { schoolCalendarModel } = require("../models");
 
@@ -543,6 +544,21 @@ exports.getChildAttendance = asyncHandler(async (req, res, next) => {
         successResponse(res, 200, null, data);
     } catch (e) {
         console.error("Error loading child attendance:", e);
+        next(e);
+    }
+});
+
+// Read-only. All figures come from buildFeeStatement — nothing is
+// computed here.
+exports.getChildFees = asyncHandler(async (req, res, next) => {
+    try {
+        const child = await findGuardedChild(req);
+        if (!child) return next(childNotFound());
+
+        const statement = await buildFeeStatement(getSchoolId(req), child._id, child.classArmId);
+        successResponse(res, 200, null, statement);
+    } catch (e) {
+        console.error("Error loading child fees:", e);
         next(e);
     }
 });

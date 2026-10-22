@@ -7,6 +7,7 @@ const {
     getChildProfile,
     getChildResults,
     getChildAttendance,
+    getChildFees,
 } = require("../controller/portal");
 const multipleProtect = require("../middleware/multipleAuth");
 
@@ -19,5 +20,6 @@ router.get("/parent/me", multipleProtect(["parent"]), getParentPortalHome);
 router.get("/child/:childId/profile", multipleProtect(["parent"]), getChildProfile);
 router.get("/child/:childId/results", multipleProtect(["parent"]), getChildResults);
 router.get("/child/:childId/attendance", multipleProtect(["parent"]), getChildAttendance);
+router.get("/child/:childId/fees", multipleProtect(["parent"]), getChildFees);
 
 module.exports = router;
