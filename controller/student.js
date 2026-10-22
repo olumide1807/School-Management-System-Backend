@@ -1,6 +1,6 @@
 // middleware
 const { asyncHandler } = require("../middleware");
-const { validateRegister, validateLinkParent, validateEditStudent, validateCreateStudentAttendance, validateUpdateStaffAttendance } = require("../middleware/validation");
+const { validateRegister, validateEditStudent, validateCreateStudentAttendance, validateUpdateStaffAttendance } = require("../middleware/validation");
 
 // utils
 const ErrorResponse = require("../utils/errorResponse");
@@ -281,56 +281,6 @@ exports.registerStudent = asyncHandler(async (req, res, next) => {
 });
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
-
-exports.linkNewParent = asyncHandler(async (req, res, next) => {
-  try {
-    const { error } = validateLinkParent(req.body);
-
-    if (error) {
-      return next(new ErrorResponse(error.details[0].message, 400));
-    }
-
-    const schoolId = req.user.schoolName ? req.user.id : req.user.schoolId;
-    const studentId = req.params.id;
-
-    // Check if student exists in the school
-    const student = await studentModel.findOne({ _id: studentId, schoolId });
-
-    if (!student) {
-      return next(new ErrorResponse(`Student with id: ${studentId} not found in your school`, 400));
-    }
-
-    const { parentId, relationship } = req.body;
-
-    // Check if the parent already exists among the guardians
-    const isParentLinked = student.guardians.some(guardian => guardian.parentId.equals(parentId));
-
-    if (isParentLinked) {
-      return next(new ErrorResponse(`Parent with id: ${parentId} is already linked to the student`, 400));
-    }
-
-    // Link parent
-    const linkedParent = await linkParent(parentId, schoolId, relationship, {});
-
-    if (!linkedParent) {
-      return next(new ErrorResponse(`Parent with id: ${parentId} does not exist, therefore it can't be linked.`, 400));
-    }
-
-    // Update student's guardians
-    student.guardians.push(...linkedParent.guardians);
-    await student.save();
-
-    return res.status(200).json({
-      success: true,
-      message: "Parent linked to student successfully!",
-    });
-  } catch (error) {
-    console.error(`Error linking new parent: ${error}`);
-    return next(new ErrorResponse("Error linking new parent, please try again later", 500));
-  }
-});
-
-////////////////////////////////////////////////////////////////////////////////
 
 exports.deleteStudent = asyncHandler(async(req, res, next) => {
   try{
