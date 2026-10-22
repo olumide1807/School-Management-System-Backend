@@ -40,6 +40,9 @@ const parentSchema = new mongoose.Schema({
     // it would make every save() on them (e.g. a password reset) fail.
     address: addressSchema,
     country: String,
+    // Optional for the same reason as address; defined as on staff
+    stateOfOrigin: String,
+    localGovernmentArea: String,
     schoolId: {
         type: mongoose.Schema.Types.ObjectId,
         ref: "SuperAdmin"
