@@ -23,7 +23,9 @@ const schema = new mongoose.Schema({
     fees: [
         {
             description: String,
-            amount: String
+            // In major units (naira). Validated on the way in by
+            // utils/feeAmount.js: zero or more, at most two decimals.
+            amount: { type: Number, required: true, min: 0 }
         }
     ]
 }, { timestamps: true });   

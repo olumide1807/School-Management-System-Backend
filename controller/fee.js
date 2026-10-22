@@ -14,15 +14,16 @@ const classArm = require("../models/classArm");
 exports.createFee = asyncHandler(async (req, res, next) => {
   try {
     // Validate the request body using a custom validation function
-    const { error } = validateCreateFee(req.body);
+    const { error, value } = validateCreateFee(req.body);
     if (error) {
       // If validation fails, return an error response
       return next(new ErrorResponse(error.details[0].message, 400));
     }
 
-    // Destructure the necessary properties from the request object
-    const { body, user } = req;
-    const { termId, classArms, currency, fees } = body;
+    // Use the validated value, not the raw body: the validator is what
+    // turns each fee amount into a Number
+    const { user } = req;
+    const { termId, classArms, currency, fees } = value;
 
     // Extract the schoolId from the user object
     const schoolId = user.schoolName ? user.id : user.schoolId;

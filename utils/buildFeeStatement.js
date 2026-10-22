@@ -4,6 +4,7 @@ const {
     termModel,
     sessionModel,
 } = require("../models");
+const { parseFeeAmount } = require("./feeAmount");
 
 // ============================================================
 // FEE STATEMENT FOR ONE STUDENT
@@ -20,19 +21,10 @@ const {
 const toMinor = (n) => Math.round(Number(n) * 100);
 const toMajor = (minor) => minor / 100;
 
-// Fee item amounts are stored as strings and the create validator accepts
-// any string. Read only plain numbers ("2000", "1500.50"); anything else
-// ("50,000", "₦5k") is unreadable, and a statement containing one says so
-// rather than guessing. This also means any figure we do show is one
-// parseFloat would read the same way.
-const parseFeeAmount = (value) => {
-    if (typeof value === "number" && Number.isFinite(value)) return toMinor(value);
-    if (typeof value !== "string") return null;
-    const trimmed = value.trim();
-    if (!/^\d+(\.\d{1,2})?$/.test(trimmed)) return null;
-    return toMinor(trimmed);
-};
-
+// Fee item amounts are stored as numbers and validated on the way in by
+// the same parseFeeAmount used here. A stored value it can't read (an
+// old record, or one written around the API) marks the fee incomplete
+// rather than being guessed at.
 // Figures for one fee record and the payments this student made against it
 const summariseFee = (fee, payments) => {
     const items = (fee.fees || []).map((item) => {
