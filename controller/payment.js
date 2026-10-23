@@ -3,6 +3,7 @@ const ErrorResponse = require("../utils/errorResponse");
 const { successResponse } = require("../utils/successResponse");
 const { isValidMongoId } = require("../utils/isValidMongoObjectId");
 const { paymentModel, feeModel, studentModel } = require("../models");
+const { resolvePaymentDate } = require("../utils/paymentDate");
 
 // Record a payment
 exports.createPayment = asyncHandler(async (req, res, next) => {
@@ -13,6 +14,10 @@ exports.createPayment = asyncHandler(async (req, res, next) => {
         if (!studentId || !feeId || !amount) {
             return next(new ErrorResponse("studentId, feeId, and amount are required", 400));
         }
+
+        // The form blocks future dates too; this is the check that holds
+        const when = resolvePaymentDate(paymentDate);
+        if (when.error) return next(new ErrorResponse(when.error, 400));
 
         // Verify student exists
         const student = await studentModel.findOne({ _id: studentId, schoolId });
@@ -31,7 +36,7 @@ exports.createPayment = asyncHandler(async (req, res, next) => {
             reference: reference || "",
             note: note || "",
             receivedBy: receivedBy || "",
-            paymentDate: paymentDate || new Date(),
+            paymentDate: when.date,
         });
 
         successResponse(res, 201, "Payment recorded successfully!", payment);
