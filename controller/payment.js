@@ -28,6 +28,30 @@ exports.createPayment = asyncHandler(async (req, res, next) => {
         const fee = await feeModel.findOne({ _id: feeId, schoolId });
         if (!fee) return next(new ErrorResponse("Fee record not found", 404));
 
+        // Has this reference already been recorded anywhere in the school?
+        // A bank line entered twice overstates what a parent has paid, and
+        // they won't report it — so warn, naming the existing payment. Only
+        // a warning: a reference can legitimately repeat, so the bursar can
+        // confirm with confirmDuplicate: true (the boolean, not a string).
+        // School-wide, not per term: the same line against the wrong term
+        // is exactly the mistake worth catching. Blank references aren't
+        // checked.
+        const ref = typeof reference === "string" ? reference.trim() : "";
+        if (ref && req.body.confirmDuplicate !== true) {
+            const duplicates = await findPaymentsByReference(schoolId, ref, { maxRank: 1, limit: 5 });
+            if (duplicates.length > 0) {
+                const d = duplicates[0];
+                const who = d.student ? `${d.student.name} (${d.student.studentID})` : "a student no longer on record";
+                const when = new Date(d.paymentDate).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
+                return res.status(409).json({
+                    success: false,
+                    code: "DUPLICATE_REFERENCE",
+                    error: `This reference has already been recorded for ${who}: ₦${Number(d.amount).toLocaleString("en-NG")} on ${when}. If this is a separate payment, send it again with confirmDuplicate: true.`,
+                    duplicates,
+                });
+            }
+        }
+
         const payment = await paymentModel.create({
             studentId,
             feeId,
