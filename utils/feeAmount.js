@@ -1,6 +1,7 @@
-// The one rule for what counts as a fee amount: zero or more, with at most
-// two decimal places (kobo). Used both to validate input and to read stored
-// amounts, so the two can't disagree.
+// The one rule for what counts as a money amount: zero or more, with at
+// most two decimal places (kobo). Used to validate fee amounts and payment
+// amounts on the way in, and to read stored fee amounts, so none of them
+// can disagree. (Payments additionally refuse zero.)
 //
 // Returns the amount in minor units (an integer), or null if it isn't
 // cleanly a valid amount. Strings are accepted only if they are exactly a

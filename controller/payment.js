@@ -4,6 +4,7 @@ const { successResponse } = require("../utils/successResponse");
 const { isValidMongoId } = require("../utils/isValidMongoObjectId");
 const { paymentModel, feeModel, studentModel } = require("../models");
 const { resolvePaymentDate } = require("../utils/paymentDate");
+const { parseFeeAmount } = require("../utils/feeAmount");
 const { normaliseReference, findPaymentsByReference } = require("../utils/paymentReference");
 
 // Record a payment
@@ -12,8 +13,22 @@ exports.createPayment = asyncHandler(async (req, res, next) => {
         const schoolId = req.user.schoolName ? req.user.id : req.user.schoolId;
         const { studentId, feeId, amount, paymentMethod, reference, note, receivedBy, paymentDate } = req.body;
 
-        if (!studentId || !feeId || !amount) {
+        if (!studentId || !feeId || amount === undefined || amount === null || amount === "") {
             return next(new ErrorResponse("studentId, feeId, and amount are required", 400));
+        }
+
+        // The same rule as fee amounts (utils/feeAmount.js), so "50,000"
+        // can't become 50 here either. Zero is refused too: a ₦0 payment
+        // changes nothing a parent owes and can only be a mistake.
+        const amountMinor = parseFeeAmount(amount);
+        if (amountMinor === null) {
+            return next(new ErrorResponse(
+                "Payment amount must be a plain number with at most two decimal places (e.g. 50000 or 1500.50), with no commas or currency symbols.",
+                400
+            ));
+        }
+        if (amountMinor === 0) {
+            return next(new ErrorResponse("Payment amount must be more than zero.", 400));
         }
 
         // The form blocks future dates too; this is the check that holds
@@ -56,7 +71,7 @@ exports.createPayment = asyncHandler(async (req, res, next) => {
             studentId,
             feeId,
             schoolId,
-            amount: Number(amount),
+            amount: amountMinor / 100,
             paymentMethod: paymentMethod || "cash",
             reference: reference || "",
             note: note || "",
