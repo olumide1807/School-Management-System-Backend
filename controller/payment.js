@@ -4,6 +4,7 @@ const { successResponse } = require("../utils/successResponse");
 const { isValidMongoId } = require("../utils/isValidMongoObjectId");
 const { paymentModel, feeModel, studentModel } = require("../models");
 const { resolvePaymentDate } = require("../utils/paymentDate");
+const { normaliseReference, findPaymentsByReference } = require("../utils/paymentReference");
 
 // Record a payment
 exports.createPayment = asyncHandler(async (req, res, next) => {
@@ -42,6 +43,27 @@ exports.createPayment = asyncHandler(async (req, res, next) => {
         successResponse(res, 201, "Payment recorded successfully!", payment);
     } catch (e) {
         console.error("Error recording payment:", e);
+        next(e);
+    }
+});
+
+// GET /payment/search?reference=... — has this bank line been recorded?
+// Loose matching (spacing, case and punctuation ignored, a cut-short
+// narration still found), closest matches first. Read-only.
+exports.searchPaymentsByReference = asyncHandler(async (req, res, next) => {
+    try {
+        const schoolId = req.user.schoolName ? req.user.id : req.user.schoolId;
+        const query = typeof req.query.reference === "string" ? req.query.reference.trim() : "";
+
+        // Too short to mean anything: "qm" would match every narration
+        if (normaliseReference(query).length < 3) {
+            return next(new ErrorResponse("Enter at least 3 letters or digits of the reference", 400));
+        }
+
+        const results = await findPaymentsByReference(schoolId, query);
+        successResponse(res, 200, null, results);
+    } catch (e) {
+        console.error("Error searching payments:", e);
         next(e);
     }
 });
