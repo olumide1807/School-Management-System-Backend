@@ -37,5 +37,6 @@ module.exports = {
     validateEditSpecificSubject: require("./Subject/editSpecificSubject.js"),
     validateCreateGradeSystem: require("./Grade/create.js"),
     validateUpdateGradeSystem: require("./Grade/update.js"),
-    validateCreateAsssessmentFormat: require("./Assessment/create.js")
+    validateCreateAsssessmentFormat: require("./Assessment/create.js"),
+    validateBankDetails: require("./settings/bankDetails.js")
 };

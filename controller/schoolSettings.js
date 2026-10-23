@@ -2,6 +2,7 @@ const asyncHandler = require("../middleware/async");
 const ErrorResponse = require("../utils/errorResponse");
 const { successResponse } = require("../utils/successResponse");
 const { schoolSettingsModel, SuperAdminModel, staffModel } = require("../models");
+const { validateBankDetails } = require("../middleware/validation");
 
 const getSchoolId = (req) =>
     req.user.schoolName ? req.user.id : req.user.schoolId;
@@ -38,6 +39,32 @@ exports.updateSchoolSettings = asyncHandler(async (req, res, next) => {
         successResponse(res, 200, "Settings updated successfully", settings);
     } catch (e) {
         console.error("Error updating school settings:", e);
+        next(e);
+    }
+});
+
+// PUT /settings/bank-details — where families pay fees. Its own endpoint,
+// open to admins as well as the super admin, because the general PUT
+// /settings accepts any settings field and must stay super-admin only.
+// Only the four bank fields can be written here.
+exports.updateBankDetails = asyncHandler(async (req, res, next) => {
+    try {
+        const { error, value } = validateBankDetails(req.body);
+        if (error) return next(new ErrorResponse(error.details[0].message, 400));
+
+        const schoolId = getSchoolId(req);
+        const set = {};
+        for (const [field, v] of Object.entries(value)) set[`bankDetails.${field}`] = v;
+
+        const settings = await schoolSettingsModel.findOneAndUpdate(
+            { schoolId },
+            { $set: set, schoolId },
+            { upsert: true, new: true, runValidators: true }
+        );
+
+        successResponse(res, 200, "Bank details updated", settings.bankDetails);
+    } catch (e) {
+        console.error("Error updating bank details:", e);
         next(e);
     }
 });

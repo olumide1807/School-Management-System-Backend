@@ -1,5 +1,5 @@
 const express = require("express");
-const { getSchoolSettings, updateSchoolSettings, getSchoolInfo } = require("../controller/schoolSettings");
+const { getSchoolSettings, updateSchoolSettings, getSchoolInfo, updateBankDetails } = require("../controller/schoolSettings");
 const multiProtect = require("../middleware/multipleAuth");
 
 const router = express.Router();
@@ -10,5 +10,7 @@ const router = express.Router();
 router.get("/school-info", multiProtect(["super admin", "admin", "academic", "non-academic", "student", "parent"]), getSchoolInfo);
 router.get("/", multiProtect(["super admin", "admin"]), getSchoolSettings);
 router.put("/", multiProtect(["super admin"]), updateSchoolSettings);
+// Admins too, but only the bank fields — see updateBankDetails
+router.put("/bank-details", multiProtect(["super admin", "admin"]), updateBankDetails);
 
 module.exports = router;
