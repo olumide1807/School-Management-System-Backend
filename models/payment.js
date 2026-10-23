@@ -20,10 +20,12 @@ const paymentSchema = new mongoose.Schema({
         type: Number,
         required: true
     },
+    // No default: a missing method used to become "cash", so a transfer
+    // could be recorded as cash without anyone choosing that
     paymentMethod: {
         type: String,
         enum: ["cash", "bank transfer", "card", "other"],
-        default: "cash"
+        required: true
     },
     reference: String,
     note: String,

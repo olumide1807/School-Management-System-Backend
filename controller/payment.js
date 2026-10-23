@@ -31,6 +31,16 @@ exports.createPayment = asyncHandler(async (req, res, next) => {
             return next(new ErrorResponse("Payment amount must be more than zero.", 400));
         }
 
+        // Required, and one of the model's methods. Defaulting to cash
+        // recorded transfers as cash whenever a caller left it out.
+        const methods = paymentModel.schema.path("paymentMethod").enumValues;
+        if (!methods.includes(paymentMethod)) {
+            return next(new ErrorResponse(
+                `Payment method is required: one of ${methods.map((m) => `"${m}"`).join(", ")}`,
+                400
+            ));
+        }
+
         // The form blocks future dates too; this is the check that holds
         const when = resolvePaymentDate(paymentDate);
         if (when.error) return next(new ErrorResponse(when.error, 400));
@@ -72,7 +82,7 @@ exports.createPayment = asyncHandler(async (req, res, next) => {
             feeId,
             schoolId,
             amount: amountMinor / 100,
-            paymentMethod: paymentMethod || "cash",
+            paymentMethod,
             reference: reference || "",
             note: note || "",
             receivedBy: receivedBy || "",
