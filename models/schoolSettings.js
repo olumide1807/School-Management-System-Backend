@@ -1,5 +1,8 @@
 const mongoose = require("mongoose");
 
+// Nigerian account number (NUBAN): exactly 10 digits
+const NUBAN = /^\d{10}$/;
+
 const gradingScaleSchema = new mongoose.Schema({
     grade: { type: String, required: true },       // A, B, C, D, E, F
     minScore: { type: Number, required: true },     // 70
@@ -38,6 +41,27 @@ const schoolSettingsSchema = new mongoose.Schema({
         currency: { type: String, default: "NGN" },
         platformFeeAmount: { type: Number, default: 2000 },
         platformFeeDescription: { type: String, default: "Platform Fee (Basitech)" },
+    },
+
+    // Where families pay fees, shown on the parent fees page. All optional:
+    // a school that hasn't filled these in shows "ask the school office".
+    bankDetails: {
+        bankName: { type: String, trim: true, default: "" },
+        accountName: { type: String, trim: true, default: "" },
+        // NUBAN: exactly 10 digits. A String, never a Number, so a leading
+        // zero survives. Empty means not set.
+        accountNumber: {
+            type: String,
+            trim: true,
+            default: "",
+            validate: {
+                validator: (v) => v === "" || v == null || NUBAN.test(v),
+                message: "Account number must be exactly 10 digits",
+            },
+        },
+        // Anything specific to this school, e.g. "Pay at the bursary on
+        // Fridays" or "Use the child's class in the narration"
+        paymentInstructions: { type: String, trim: true, default: "" },
     },
 
     // ID format
@@ -90,3 +114,4 @@ const schoolSettingsSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 module.exports = mongoose.model("SchoolSettings", schoolSettingsSchema);
+module.exports.NUBAN = NUBAN;

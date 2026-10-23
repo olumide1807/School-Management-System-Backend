@@ -18,7 +18,7 @@ const {
 const { buildClassReport } = require("../utils/buildClassReport");
 const { buildFeeStatement } = require("../utils/buildFeeStatement");
 const { isValidMongoId } = require("../utils/isValidMongoObjectId");
-const { schoolCalendarModel } = require("../models");
+const { schoolCalendarModel, schoolSettingsModel } = require("../models");
 
 // ============================================================
 // STUDENT PORTAL HOME
@@ -548,6 +548,23 @@ exports.getChildAttendance = asyncHandler(async (req, res, next) => {
     }
 });
 
+// Where a family pays. The bank account is only returned when it's
+// complete and the account number is a valid NUBAN — a half-filled or
+// mistyped account is how money goes to a stranger, so in that case the
+// page says to ask the school office instead. The school's own
+// instruction text is independent of the account.
+const paymentDetailsFrom = (settings) => {
+    const b = settings?.bankDetails || {};
+    const bankName = (b.bankName || "").trim();
+    const accountName = (b.accountName || "").trim();
+    const accountNumber = (b.accountNumber || "").trim();
+    const complete = bankName && accountName && schoolSettingsModel.NUBAN.test(accountNumber);
+    return {
+        bankAccount: complete ? { bankName, accountName, accountNumber } : null,
+        instructions: (b.paymentInstructions || "").trim() || null,
+    };
+};
+
 // Read-only. All figures come from buildFeeStatement — nothing is
 // computed here.
 exports.getChildFees = asyncHandler(async (req, res, next) => {
@@ -555,8 +572,12 @@ exports.getChildFees = asyncHandler(async (req, res, next) => {
         const child = await findGuardedChild(req);
         if (!child) return next(childNotFound());
 
-        const statement = await buildFeeStatement(getSchoolId(req), child._id, child.classArmId);
-        successResponse(res, 200, null, statement);
+        const schoolId = getSchoolId(req);
+        const [statement, settings] = await Promise.all([
+            buildFeeStatement(schoolId, child._id, child.classArmId),
+            schoolSettingsModel.findOne({ schoolId }).select("bankDetails"),
+        ]);
+        successResponse(res, 200, null, { ...statement, paymentDetails: paymentDetailsFrom(settings) });
     } catch (e) {
         console.error("Error loading child fees:", e);
         next(e);
