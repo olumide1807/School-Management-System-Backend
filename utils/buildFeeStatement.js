@@ -3,6 +3,8 @@ const {
     paymentModel,
     termModel,
     sessionModel,
+    classArmModel,
+    classLevelModel,
 } = require("../models");
 const { parseFeeAmount } = require("./feeAmount");
 
@@ -105,6 +107,24 @@ async function buildFeeStatement(schoolId, studentId, classArmId) {
         schoolId,
         _id: { $in: [...new Set(allFees.map((f) => String(f.termId)))] },
     });
+
+    // The class each fee was set for — not the student's current class,
+    // which changes on promotion. A receipt for last term's JSS1 fee must
+    // say JSS1 even after the child moves to JSS2.
+    const arms = await classArmModel.find({
+        schoolId,
+        _id: { $in: [...new Set(allFees.map((f) => String(f.classArmId)))] },
+    });
+    const levels = await classLevelModel.find({
+        schoolId,
+        _id: { $in: [...new Set(arms.map((a) => String(a.classLevelId)))] },
+    });
+    const classLabelOf = (armId) => {
+        const arm = arms.find((a) => String(a._id) === String(armId));
+        if (!arm) return null;
+        const level = levels.find((l) => String(l._id) === String(arm.classLevelId));
+        return `${level?.levelShortName || ""} ${(arm.armName || "").toUpperCase()}`.trim() || null;
+    };
     const sessions = await sessionModel.find({
         schoolId,
         _id: { $in: [...new Set(terms.map((t) => String(t.sessionId)))] },
@@ -126,6 +146,7 @@ async function buildFeeStatement(schoolId, studentId, classArmId) {
         return {
             feeId: String(fee._id),
             term,
+            classLabel: classLabelOf(fee.classArmId),
             ...summariseFee(fee, own),
             payments: own.map(publicPayment),
             _sortDate: startDate || fee.createdAt,
