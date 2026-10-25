@@ -22,9 +22,13 @@ const FIXED_NIGERIAN_HOLIDAYS = [
     { month: 11, day: 26, name: "Boxing Day" },
 ];
 
-const validateEntry = ({ name, type, startDate, endDate }) => {
+const validateEntry = ({ name, type, startDate, endDate, closesSchool }) => {
     if (!name || !String(name).trim()) return "A name is required";
     if (type && !TYPES.includes(type)) return "Invalid type";
+    // A real boolean only: "false" as a string must not be read as true
+    if (closesSchool !== undefined && typeof closesSchool !== "boolean") {
+        return "closesSchool must be true or false";
+    }
     if (!startDate || Number.isNaN(new Date(startDate).getTime())) return "A valid start date is required";
     const end = endDate || startDate;
     if (Number.isNaN(new Date(end).getTime())) return "A valid end date is required";
@@ -41,7 +45,7 @@ exports.createCalendarEntry = asyncHandler(async (req, res, next) => {
         if (error) return next(new ErrorResponse(error, 400));
 
         const schoolId = getSchoolId(req);
-        const { name, type, startDate, endDate } = req.body;
+        const { name, type, startDate, endDate, closesSchool } = req.body;
 
         const entryType = type || "public_holiday";
         const entry = await schoolCalendarModel.create({
@@ -50,8 +54,8 @@ exports.createCalendarEntry = asyncHandler(async (req, res, next) => {
             type: entryType,
             startDate: toDayStart(startDate),
             endDate: toDayStart(endDate || startDate),
-            // Stored explicitly, defaulted by type
-            closesSchool: defaultClosesSchool(entryType),
+            // The admin's choice, else the type's default — stored either way
+            closesSchool: typeof closesSchool === "boolean" ? closesSchool : defaultClosesSchool(entryType),
         });
 
         successResponse(res, 201, "Added to the school calendar", entry);
@@ -117,11 +121,14 @@ exports.updateCalendarEntry = asyncHandler(async (req, res, next) => {
         const entry = await schoolCalendarModel.findOne({ _id: id, schoolId });
         if (!entry) return next(new ErrorResponse("Calendar entry not found", 404));
 
-        const { name, type, startDate, endDate } = req.body;
+        const { name, type, startDate, endDate, closesSchool } = req.body;
         entry.name = String(name).trim();
         entry.type = type || entry.type;
         entry.startDate = toDayStart(startDate);
         entry.endDate = toDayStart(endDate || startDate);
+        // Changed only when sent. Never re-defaulted from a new type: that
+        // could silently open a day that has been treated as closed.
+        if (typeof closesSchool === "boolean") entry.closesSchool = closesSchool;
         await entry.save();
 
         successResponse(res, 200, "Calendar entry updated", entry);
