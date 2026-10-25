@@ -19,6 +19,7 @@ const { buildClassReport } = require("../utils/buildClassReport");
 const { buildFeeStatement } = require("../utils/buildFeeStatement");
 const { isValidMongoId } = require("../utils/isValidMongoObjectId");
 const { schoolCalendarModel, schoolSettingsModel } = require("../models");
+const { findClosuresBetween } = require("../utils/schoolDay");
 
 // ============================================================
 // STUDENT PORTAL HOME
@@ -580,6 +581,74 @@ exports.getChildFees = asyncHandler(async (req, res, next) => {
         successResponse(res, 200, null, { ...statement, paymentDetails: paymentDetailsFrom(settings) });
     } catch (e) {
         console.error("Error loading child fees:", e);
+        next(e);
+    }
+});
+
+// ============================================================
+// SCHOOL CALENDAR (students and parents)
+// GET /portal/calendar
+//
+// School-wide, not per child. The current term is found the same way the
+// attendance auto-marker finds it, and closures come from the same
+// utils/schoolDay query it uses — so a day families see as closed is a
+// day the register and the scheduler treat as closed.
+// ============================================================
+exports.getPortalCalendar = asyncHandler(async (req, res, next) => {
+    try {
+        const schoolId = getSchoolId(req);
+        if (!schoolId) return next(new ErrorResponse("School not found", 404));
+
+        const currentTerm = await termModel.findOne({ schoolId, currentTerm: true });
+        // Between terms there's no current term; fall back to the session
+        // the school has marked current
+        const session = currentTerm
+            ? await sessionModel.findOne({ schoolId, _id: currentTerm.sessionId })
+            : await sessionModel.findOne({ schoolId, currentSession: true });
+
+        const sessionTerms = session
+            ? await termModel.find({ schoolId, sessionId: session._id }).sort({ termStartDate: 1 })
+            : [];
+
+        // A session has no dates of its own: it runs from its first term's
+        // start to its last term's end, where those are set
+        const starts = sessionTerms.map((t) => t.termStartDate).filter(Boolean).map((d) => new Date(d));
+        const ends = sessionTerms.map((t) => t.termEndDate).filter(Boolean).map((d) => new Date(d));
+        const sessionStart = starts.length ? new Date(Math.min(...starts)) : null;
+        const sessionEnd = ends.length ? new Date(Math.max(...ends)) : null;
+
+        const [entries, anyEntry] = await Promise.all([
+            sessionStart && sessionEnd ? findClosuresBetween(schoolId, sessionStart, sessionEnd) : [],
+            schoolCalendarModel.findOne({ schoolId }).select("_id"),
+        ]);
+
+        const termOut = (t) => ({
+            termId: t._id,
+            termName: t.termName,
+            startDate: t.termStartDate || null,
+            endDate: t.termEndDate || null,
+            isCurrent: !!t.currentTerm,
+        });
+
+        successResponse(res, 200, null, {
+            term: currentTerm ? termOut(currentTerm) : null,
+            session: session
+                ? { sessionId: session._id, sessionName: session.sessionName, startDate: sessionStart, endDate: sessionEnd }
+                : null,
+            terms: sessionTerms.map(termOut),
+            entries: entries.map((e) => ({
+                _id: e._id,
+                name: e.name,
+                type: e.type,
+                startDate: e.startDate,
+                endDate: e.endDate,
+            })),
+            // false: the school has never added a calendar entry at all,
+            // as distinct from "none fall in this session"
+            calendarSetUp: !!anyEntry,
+        });
+    } catch (e) {
+        console.error("Error loading portal calendar:", e);
         next(e);
     }
 });

@@ -8,6 +8,7 @@ const {
     getChildResults,
     getChildAttendance,
     getChildFees,
+    getPortalCalendar,
 } = require("../controller/portal");
 const multipleProtect = require("../middleware/multipleAuth");
 
@@ -21,5 +22,7 @@ router.get("/child/:childId/profile", multipleProtect(["parent"]), getChildProfi
 router.get("/child/:childId/results", multipleProtect(["parent"]), getChildResults);
 router.get("/child/:childId/attendance", multipleProtect(["parent"]), getChildAttendance);
 router.get("/child/:childId/fees", multipleProtect(["parent"]), getChildFees);
+// School-wide, so not under /child: a parent sees the same calendar for every child
+router.get("/calendar", multipleProtect(["student", "parent"]), getPortalCalendar);
 
 module.exports = router;
