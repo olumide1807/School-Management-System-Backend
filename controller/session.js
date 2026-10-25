@@ -333,16 +333,6 @@ exports.getCurrentSession = asyncHandler(async (req, res, next) => {
 
 
 
-exports.getTermsinSesson = asyncHandler(async(req,res,next) =>{
-  try{
-    const {id} = req.params
-    const terms = await termModel.find({sessionId:id})
-    successResponse(res,200,null,terms)
-  }catch(e){
-    console.error("Error getting terms in session", e);
-    next(e);
-  }
-})
 exports.getAllSessions = asyncHandler(async (req, res, next) => {
   try{
     // find all sessions
