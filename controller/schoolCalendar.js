@@ -3,7 +3,8 @@ const ErrorResponse = require("../utils/errorResponse");
 const { successResponse } = require("../utils/successResponse");
 const { isValidMongoId } = require("../utils/isValidMongoObjectId");
 const { schoolCalendarModel, termModel } = require("../models");
-const { toDayStart, isSchoolDay } = require("../utils/schoolDay");
+const { toDayStart, isSchoolDay, CLOSES_SCHOOL } = require("../utils/schoolDay");
+const { defaultClosesSchool } = require("../models/schoolCalendar");
 
 const getSchoolId = (req) => (req.user.schoolName ? req.user.id : req.user.schoolId);
 
@@ -42,12 +43,15 @@ exports.createCalendarEntry = asyncHandler(async (req, res, next) => {
         const schoolId = getSchoolId(req);
         const { name, type, startDate, endDate } = req.body;
 
+        const entryType = type || "public_holiday";
         const entry = await schoolCalendarModel.create({
             schoolId,
             name: String(name).trim(),
-            type: type || "public_holiday",
+            type: entryType,
             startDate: toDayStart(startDate),
             endDate: toDayStart(endDate || startDate),
+            // Stored explicitly, defaulted by type
+            closesSchool: defaultClosesSchool(entryType),
         });
 
         successResponse(res, 201, "Added to the school calendar", entry);
@@ -192,10 +196,14 @@ exports.addPublicHolidays = asyncHandler(async (req, res, next) => {
 
         let added = 0;
         for (const c of candidates) {
+            // Skip only if the school is already closed that day — a sports
+            // day that doesn't close the school mustn't stop the public
+            // holiday being added
             const exists = await schoolCalendarModel.findOne({
                 schoolId,
                 startDate: { $lte: c.day },
                 endDate: { $gte: c.day },
+                ...CLOSES_SCHOOL,
             });
             if (exists) continue;
 
@@ -205,6 +213,7 @@ exports.addPublicHolidays = asyncHandler(async (req, res, next) => {
                 type: "public_holiday",
                 startDate: c.day,
                 endDate: c.day,
+                closesSchool: true,
             });
             added++;
         }

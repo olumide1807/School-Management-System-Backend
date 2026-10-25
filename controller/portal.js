@@ -19,7 +19,7 @@ const { buildClassReport } = require("../utils/buildClassReport");
 const { buildFeeStatement } = require("../utils/buildFeeStatement");
 const { isValidMongoId } = require("../utils/isValidMongoObjectId");
 const { schoolCalendarModel, schoolSettingsModel } = require("../models");
-const { findClosuresBetween } = require("../utils/schoolDay");
+const { findClosuresBetween, findCalendarEntriesBetween, closesSchool } = require("../utils/schoolDay");
 
 // ============================================================
 // STUDENT PORTAL HOME
@@ -330,11 +330,9 @@ const loadStudentAttendance = async (schoolId, studentId, query) => {
         studentAttendanceModel
             .find({ schoolId, studentId, termId: chosen.termId })
             .sort({ date: 1 }),
-        schoolCalendarModel.find({
-            schoolId,
-            startDate: { $lte: term.termEndDate },
-            endDate: { $gte: term.termStartDate },
-        }),
+        // Only entries that close the school drop a day from the term; on a
+        // sports day the register is taken, so it stays a school day here
+        findClosuresBetween(schoolId, term.termStartDate, term.termEndDate),
     ]);
 
     const key = (d) => new Date(d).toISOString().split("T")[0];
@@ -618,7 +616,8 @@ exports.getPortalCalendar = asyncHandler(async (req, res, next) => {
         const sessionEnd = ends.length ? new Date(Math.max(...ends)) : null;
 
         const [entries, anyEntry] = await Promise.all([
-            sessionStart && sessionEnd ? findClosuresBetween(schoolId, sessionStart, sessionEnd) : [],
+            // Closing and non-closing entries alike; each says which it is
+            sessionStart && sessionEnd ? findCalendarEntriesBetween(schoolId, sessionStart, sessionEnd) : [],
             schoolCalendarModel.findOne({ schoolId }).select("_id"),
         ]);
 
@@ -642,6 +641,9 @@ exports.getPortalCalendar = asyncHandler(async (req, res, next) => {
                 type: e.type,
                 startDate: e.startDate,
                 endDate: e.endDate,
+                // Whether school is closed on these days — the same reading
+                // the register and the auto-marker use
+                closesSchool: closesSchool(e),
             })),
             // false: the school has never added a calendar entry at all,
             // as distinct from "none fall in this session"
