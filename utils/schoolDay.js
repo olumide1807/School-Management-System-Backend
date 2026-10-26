@@ -68,6 +68,45 @@ const isSchoolDay = async (schoolId, date) => {
     return { open: true, reason: null, closure: null };
 };
 
+// The one rule for changing a calendar entry: a closed day that has started
+// (today or earlier) can't be reopened. No register was asked for on it and
+// one can't be taken now — today's students would be auto-marked absent at
+// closing time, and past days would join attendance with no register.
+//
+// `next` is what the entry becomes: { startDate, endDate, closesSchool },
+// or null when it's being deleted. Returns the started weekdays this entry
+// closes now that would be open afterwards, earliest first ([] = allowed).
+// A day another closing entry still covers isn't reopened, so removing a
+// duplicate is fine. "Today" is toDayStart(now), the auto-marker's day.
+const findReopenedDays = async (schoolId, entry, next, now = new Date()) => {
+    if (!closesSchool(entry)) return [];
+    const today = toDayStart(now);
+    const from = toDayStart(entry.startDate);
+    const to = new Date(Math.min(toDayStart(entry.endDate).getTime(), today.getTime()));
+    if (from > to) return []; // hasn't started
+
+    const stillClosed = (day) =>
+        next && closesSchool(next) &&
+        toDayStart(next.startDate) <= day && day <= toDayStart(next.endDate || next.startDate);
+
+    const candidates = [];
+    for (let d = new Date(from); d <= to; d = new Date(d.getTime() + 86400000)) {
+        if (!isWeekend(d) && !stillClosed(d)) candidates.push(d);
+    }
+    if (candidates.length === 0) return [];
+
+    const others = await schoolCalendarModel.find({
+        schoolId,
+        _id: { $ne: entry._id },
+        startDate: { $lte: candidates[candidates.length - 1] },
+        endDate: { $gte: candidates[0] },
+        ...CLOSES_SCHOOL,
+    });
+    return candidates.filter(
+        (d) => !others.some((o) => toDayStart(o.startDate) <= d && d <= toDayStart(o.endDate))
+    );
+};
+
 module.exports = {
     toDayStart,
     isWeekend,
@@ -77,4 +116,5 @@ module.exports = {
     closesSchool,
     CLOSES_SCHOOL,
     isSchoolDay,
+    findReopenedDays,
 };

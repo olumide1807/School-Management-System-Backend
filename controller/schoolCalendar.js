@@ -3,7 +3,7 @@ const ErrorResponse = require("../utils/errorResponse");
 const { successResponse } = require("../utils/successResponse");
 const { isValidMongoId } = require("../utils/isValidMongoObjectId");
 const { schoolCalendarModel, termModel } = require("../models");
-const { toDayStart, isSchoolDay, CLOSES_SCHOOL } = require("../utils/schoolDay");
+const { toDayStart, isSchoolDay, CLOSES_SCHOOL, findReopenedDays } = require("../utils/schoolDay");
 const { defaultClosesSchool } = require("../models/schoolCalendar");
 
 const getSchoolId = (req) => (req.user.schoolName ? req.user.id : req.user.schoolId);
@@ -34,6 +34,29 @@ const validateEntry = ({ name, type, startDate, endDate, closesSchool }) => {
     if (Number.isNaN(new Date(end).getTime())) return "A valid end date is required";
     if (toDayStart(end) < toDayStart(startDate)) return "End date can't be before start date";
     return null;
+};
+
+// The refusal for anything findReopenedDays catches — edit, date change or
+// delete — so they all explain it the same way
+const reopenRefusal = (action, days) => {
+    const fmt = (d) => new Date(d).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
+    const which = days.length === 1 ? fmt(days[0]) : `${days.length} days from ${fmt(days[0])} to ${fmt(days[days.length - 1])}`;
+    const today = toDayStart(new Date()).getTime();
+    const hasToday = days.some((d) => toDayStart(d).getTime() === today);
+    const hasPast = days.some((d) => toDayStart(d).getTime() < today);
+    const effects = [
+        hasToday && "every student would be marked absent today at closing time",
+        hasPast && "past days would count in every student's attendance with no register",
+    ].filter(Boolean).join(", and ");
+    return new ErrorResponse(
+        `You can't ${action}: it would reopen ${which}, when the school was closed. ` +
+        "No register was taken on a closed day and it can't be taken now, so reopening would " +
+        `record absences for a register that was never taken: ${effects}. ` +
+        "Days that haven't started yet can still be changed. If a past day " +
+        "really needs reopening, that's a correction to attendance records, not a calendar " +
+        "change — contact support so the attendance can be corrected at the same time.",
+        400
+    );
 };
 
 // ============================================================
@@ -123,28 +146,13 @@ exports.updateCalendarEntry = asyncHandler(async (req, res, next) => {
 
         const { name, type, startDate, endDate, closesSchool } = req.body;
 
-        // Closed → open is refused once the range has started (the stored
-        // range or the new one). Those days were treated as closed, so no
-        // register was asked for, and one can't be taken retroactively:
-        // today the auto-marker would mark every student absent at closing
-        // time, and past days would join every child's attendance as days
-        // with no register. "Today" is the auto-marker's own day
-        // (toDayStart). Missing closesSchool counts as closed.
-        const today = toDayStart(new Date());
-        const reopening = entry.closesSchool !== false && closesSchool === false;
-        const started = [entry.startDate, startDate].some((d) => toDayStart(d) <= today);
-        if (reopening && started) {
-            return next(new ErrorResponse(
-                "These dates include today or days that have already passed, so this entry can't be " +
-                "changed to school open. The school was closed then and no register was taken — it " +
-                "can't be taken now. Reopening would record absences for a register that was never " +
-                "taken: today every student would be marked absent at closing time, and past days " +
-                "would count in every student's attendance with no register. If a past day really " +
-                "needs reopening, that's a correction to attendance records, not a calendar change — " +
-                "contact support so the attendance can be corrected at the same time.",
-                400
-            ));
-        }
+        // Opening it, or moving its dates off started days, would reopen them
+        const reopened = await findReopenedDays(schoolId, entry, {
+            startDate,
+            endDate: endDate || startDate,
+            closesSchool: typeof closesSchool === "boolean" ? closesSchool : entry.closesSchool,
+        });
+        if (reopened.length) return next(reopenRefusal("change it like this", reopened));
 
         entry.name = String(name).trim();
         entry.type = type || entry.type;
@@ -171,8 +179,14 @@ exports.deleteCalendarEntry = asyncHandler(async (req, res, next) => {
         if (!isValidMongoId(id)) return next(new ErrorResponse("Invalid id", 400));
 
         const schoolId = getSchoolId(req);
-        const entry = await schoolCalendarModel.findOneAndDelete({ _id: id, schoolId });
+        const entry = await schoolCalendarModel.findOne({ _id: id, schoolId });
         if (!entry) return next(new ErrorResponse("Calendar entry not found", 404));
+
+        // Removing a closure that has started would reopen its days
+        const reopened = await findReopenedDays(schoolId, entry, null);
+        if (reopened.length) return next(reopenRefusal("remove it", reopened));
+
+        await schoolCalendarModel.deleteOne({ _id: entry._id, schoolId });
 
         successResponse(res, 200, "Removed from the school calendar", null);
     } catch (e) {
