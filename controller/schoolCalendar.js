@@ -122,6 +122,30 @@ exports.updateCalendarEntry = asyncHandler(async (req, res, next) => {
         if (!entry) return next(new ErrorResponse("Calendar entry not found", 404));
 
         const { name, type, startDate, endDate, closesSchool } = req.body;
+
+        // Closed → open is refused once the range has started (the stored
+        // range or the new one). Those days were treated as closed, so no
+        // register was asked for, and one can't be taken retroactively:
+        // today the auto-marker would mark every student absent at closing
+        // time, and past days would join every child's attendance as days
+        // with no register. "Today" is the auto-marker's own day
+        // (toDayStart). Missing closesSchool counts as closed.
+        const today = toDayStart(new Date());
+        const reopening = entry.closesSchool !== false && closesSchool === false;
+        const started = [entry.startDate, startDate].some((d) => toDayStart(d) <= today);
+        if (reopening && started) {
+            return next(new ErrorResponse(
+                "These dates include today or days that have already passed, so this entry can't be " +
+                "changed to school open. The school was closed then and no register was taken — it " +
+                "can't be taken now. Reopening would record absences for a register that was never " +
+                "taken: today every student would be marked absent at closing time, and past days " +
+                "would count in every student's attendance with no register. If a past day really " +
+                "needs reopening, that's a correction to attendance records, not a calendar change — " +
+                "contact support so the attendance can be corrected at the same time.",
+                400
+            ));
+        }
+
         entry.name = String(name).trim();
         entry.type = type || entry.type;
         entry.startDate = toDayStart(startDate);
