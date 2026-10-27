@@ -55,7 +55,13 @@ const findCalendarEntriesBetween = async (schoolId, from, to) =>
         })
         .sort({ startDate: 1 });
 
-// The one place a stored entry is read as closing or not
+// Does this entry close the school? The one place a calendar entry is read
+// as closing or not — every reader of an entry in memory goes through it,
+// and it gives the same answer as the CLOSES_SCHOOL query: only an explicit
+// `false` is open. Absent (an entry written before the field existed, or
+// around the model) is closed. That fails safe: a closed day that should
+// have been open costs a register that can be taken later; an open day
+// that should have been closed invents absences nobody can take back.
 const closesSchool = (entry) => entry?.closesSchool !== false;
 
 // Single answer to "is this a school day?" — used by attendance guards

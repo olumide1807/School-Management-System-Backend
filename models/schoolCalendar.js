@@ -43,10 +43,17 @@ const schoolCalendarSchema = new mongoose.Schema(
         closesSchool: {
             type: Boolean,
             required: true,
-            // Backstop only: the controller sets it explicitly from the
-            // request, or from defaultClosesSchool(type)
+            // Backstop for NEW entries only: the controller sets it
+            // explicitly from the request, or from defaultClosesSchool(type).
+            //
+            // Never applied when a stored entry is loaded. Mongoose runs
+            // defaults on hydration too, which turned a stored school event
+            // with no closesSchool into `false` (open) in memory, while the
+            // register's query ($ne: false) treated it as closed. Left
+            // absent, it reads as closed everywhere — see closesSchool() in
+            // utils/schoolDay.js, the one place it's interpreted.
             default: function () {
-                return defaultClosesSchool(this.type);
+                return this.$isNew ? defaultClosesSchool(this.type) : undefined;
             },
         },
     },

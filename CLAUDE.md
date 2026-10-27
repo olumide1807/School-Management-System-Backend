@@ -152,7 +152,15 @@ first. Staff endpoints must not.
   and attendance records must line up exactly, so anything that creates or
   queries a date goes through `toDayStart`. A local-midnight `Date` will miss.
 - Weekends and `schoolCalendarModel` closures are not school days. The register
-  refuses them; the UI hides them. We shipped weekend bugs twice (a `dayKey()`
+  refuses them; the UI hides them.
+- **Whether an entry closes the school is `closesSchool`, never its type**, and
+  it's read in exactly two ways that must agree: the query `CLOSES_SCHOOL`
+  (`{ $ne: false }`, used by the register and the auto-marker) and the helper
+  `closesSchool(entry)` for anything in memory. Only an explicit `false` is
+  open; absent is closed (fails safe). Never read `entry.closesSchool`
+  directly, and never let a default fill it on load — the model's default
+  applies to new entries only. `test/closesSchool.test.js` holds the two
+  readings together for every stored value and type. We shipped weekend bugs twice (a `dayKey()`
   returning `"saturday"` with no timetable grid, and a "take attendance" banner
   showing on a Saturday) — guard on both sides.
 

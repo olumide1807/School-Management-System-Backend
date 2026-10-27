@@ -3,10 +3,15 @@ const ErrorResponse = require("../utils/errorResponse");
 const { successResponse } = require("../utils/successResponse");
 const { isValidMongoId } = require("../utils/isValidMongoObjectId");
 const { schoolCalendarModel, termModel } = require("../models");
-const { toDayStart, isSchoolDay, CLOSES_SCHOOL, findReopenedDays } = require("../utils/schoolDay");
+const { toDayStart, isSchoolDay, CLOSES_SCHOOL, findReopenedDays, closesSchool: closesSchoolOf } = require("../utils/schoolDay");
 const { defaultClosesSchool } = require("../models/schoolCalendar");
 
 const getSchoolId = (req) => (req.user.schoolName ? req.user.id : req.user.schoolId);
+
+// An entry as the API returns it, with closesSchool always present and
+// read through closesSchool() — so the admin screen never has to decide
+// what a missing value means
+const entryOut = (entry) => ({ ...entry.toObject(), closesSchool: closesSchoolOf(entry) });
 
 const TYPES = ["public_holiday", "school_break", "school_event", "other"];
 
@@ -81,7 +86,7 @@ exports.createCalendarEntry = asyncHandler(async (req, res, next) => {
             closesSchool: typeof closesSchool === "boolean" ? closesSchool : defaultClosesSchool(entryType),
         });
 
-        successResponse(res, 201, "Added to the school calendar", entry);
+        successResponse(res, 201, "Added to the school calendar", entryOut(entry));
     } catch (e) {
         console.error("Error creating calendar entry:", e);
         next(e);
@@ -102,7 +107,7 @@ exports.getCalendarEntries = asyncHandler(async (req, res, next) => {
         if (to) filter.startDate = { $lte: toDayStart(to) };
 
         const entries = await schoolCalendarModel.find(filter).sort({ startDate: 1 });
-        successResponse(res, 200, null, entries);
+        successResponse(res, 200, null, entries.map(entryOut));
     } catch (e) {
         console.error("Error getting calendar entries:", e);
         next(e);
@@ -147,10 +152,16 @@ exports.updateCalendarEntry = asyncHandler(async (req, res, next) => {
         const { name, type, startDate, endDate, closesSchool } = req.body;
 
         // Opening it, or moving its dates off started days, would reopen them
+        // Changed only when sent. Never re-defaulted from a new type: that
+        // could silently open a day that has been treated as closed. An
+        // entry stored without the field keeps the reading it has always
+        // had (closed), now written down.
+        const nextClosesSchool = typeof closesSchool === "boolean" ? closesSchool : closesSchoolOf(entry);
+
         const reopened = await findReopenedDays(schoolId, entry, {
             startDate,
             endDate: endDate || startDate,
-            closesSchool: typeof closesSchool === "boolean" ? closesSchool : entry.closesSchool,
+            closesSchool: nextClosesSchool,
         });
         if (reopened.length) return next(reopenRefusal("change it like this", reopened));
 
@@ -158,12 +169,10 @@ exports.updateCalendarEntry = asyncHandler(async (req, res, next) => {
         entry.type = type || entry.type;
         entry.startDate = toDayStart(startDate);
         entry.endDate = toDayStart(endDate || startDate);
-        // Changed only when sent. Never re-defaulted from a new type: that
-        // could silently open a day that has been treated as closed.
-        if (typeof closesSchool === "boolean") entry.closesSchool = closesSchool;
+        entry.closesSchool = nextClosesSchool;
         await entry.save();
 
-        successResponse(res, 200, "Calendar entry updated", entry);
+        successResponse(res, 200, "Calendar entry updated", entryOut(entry));
     } catch (e) {
         console.error("Error updating calendar entry:", e);
         next(e);
