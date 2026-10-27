@@ -12,6 +12,7 @@ const {
     staffModel,
 } = require("../models");
 const gradeModel = require("../models/grade");
+const { roundScore } = require("./scorePrecision");
 
 // Competition ranking: ties share a position, the next rank skips.
 const rankBy = (items) => {
@@ -192,7 +193,8 @@ async function buildClassReport(schoolId, classArmId, termId, sessionId) {
             }
 
             const scores = [...entry.scores];
-            let total = entry.Total;
+            // Rounded as stored now; older entries may hold a float sum
+            let total = roundScore(entry.Total);
             let complete = true;
 
             // The attendance component this entry was assessed with
@@ -207,7 +209,7 @@ async function buildClassReport(schoolId, classArmId, termId, sessionId) {
                         maxScore: attendanceDef.maxScore,
                         score: attMark,
                     });
-                    total += attMark;
+                    total = roundScore(total + attMark);
                 }
             }
 
@@ -283,7 +285,7 @@ async function buildClassReport(schoolId, classArmId, termId, sessionId) {
         });
 
         const graded = subjects.filter((s) => s.complete);
-        const totalScore = graded.reduce((sum, s) => sum + s.Total, 0);
+        const totalScore = roundScore(graded.reduce((sum, s) => sum + s.Total, 0));
         const average = graded.length > 0 ? round1(totalScore / graded.length) : null;
 
         return {

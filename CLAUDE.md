@@ -116,6 +116,17 @@ Scores snapshot the format rather than referencing it **on purpose**. A school
 that changes its assessment format mid-year must not retroactively rewrite last
 term's report cards. Never replace these with a ref to `assessmentModel`.
 
+Each subject entry also stores `format`: the **whole** format in force when it
+was entered, attendance component included. The attendance part isn't a typed
+score, so without this a past term's attendance component and column headings
+came from today's format. `buildClassReport` reads each entry against its own
+`format`; entries saved before it existed have none and fall back to the
+current format (`scripts/backfillResultFormats.js` fills those it can know).
+
+Marks are **one decimal place** (`utils/scorePrecision.js`): scores are
+refused with more, and totals are rounded to it when stored and when built,
+so the stored, printed and ranked figure are the same number.
+
 Comments (`teacherComment`, `principalComment`) live per term on the result.
 
 ### Positions and totals — computed, never stored
@@ -130,6 +141,10 @@ in the whole system.
 
 Positions use **competition ranking**: ties share a position, and the next rank
 skips (1, 2, 2, 4).
+
+Grade bands and the banded report comments are matched by `bandFor`: the band
+with the **highest lower bound the value reaches**. Only lower bounds count, so
+69.5 with bands 60–69 and 70–100 is in 60–69 — never in no band at all.
 
 ### Publication gating (`models/resultPublication.js`)
 Results are hidden from students and parents until published.

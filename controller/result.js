@@ -18,6 +18,8 @@ const { isValidMongoId } = require("../utils/isValidMongoObjectId");
 const gradeModel = require("../models/grade");
 const { buildClassReport } = require("../utils/buildClassReport");
 
+const { roundScore, hasScorePrecision } = require("../utils/scorePrecision");
+
 const getSchoolId = (req) => (req.user.schoolName ? req.user.id : req.user.schoolId);
 const isAdminRole = (req) => req.user.userType === "admin" || !!req.user.schoolName;
 
@@ -141,13 +143,19 @@ exports.batchUpsertResults = asyncHandler(async (req, res, next) => {
                         `${s.name} must be between 0 and ${maxScore}`, 400
                     ));
                 }
+                // A report card shows marks to one decimal (utils/scorePrecision.js)
+                if (!hasScorePrecision(value)) {
+                    return next(new ErrorResponse(
+                        `${s.name} can have at most one decimal place (e.g. 12.5)`, 400
+                    ));
+                }
                 scores.push({ name: s.name, maxScore, score: value });
             }
 
             prepared.push({
                 studentId: entry.studentId,
                 scores,
-                total: scores.reduce((sum, s) => sum + s.score, 0),
+                total: roundScore(scores.reduce((sum, s) => sum + s.score, 0)),
             });
         }
 

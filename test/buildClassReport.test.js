@@ -56,9 +56,9 @@ describe("positions: competition ranking", () => {
         expect(s("Ada").outOf).toBe(4);
     });
 
-    // Total is a floating-point sum (controller/result.js), so 12.1 + 50.2 is
-    // stored as 62.300000000000004: shown on the card, and ranked above 62.3
-    test.failing("KNOWN BUG: equal totals made of decimal scores tie (12.1 + 50.2 and 12.3 + 50 are both 62.3)", async () => {
+    // 12.1 + 50.2 is 62.300000000000004 in floating point; totals are
+    // rounded to the card's one decimal (utils/scorePrecision.js)
+    test("equal totals made of decimal scores tie (12.1 + 50.2 and 12.3 + 50 are both 62.3)", async () => {
         const fx = await reportFixture({ students: ["Ada", "Bola"] });
         await fx.enterScores("Maths", { Ada: { CA: 12.1, Exam: 50.2 }, Bola: { CA: 12.3, Exam: 50 } });
         const report = await fx.build();
@@ -69,6 +69,36 @@ describe("positions: competition ranking", () => {
 });
 
 describe("totals and averages", () => {
+    test("a total is stored as the figure the card prints", async () => {
+        const fx = await reportFixture({ students: ["Ada"] });
+        await fx.enterScores("Maths", { Ada: { CA: 12.1, Exam: 50.2 } });
+        const doc = await M.resultModel.findOne({ student: fx.studentIds.Ada }).lean();
+        expect(doc.Terms[0].subjects[0].Total).toBe(62.3);
+    });
+
+    test("a score with more than one decimal place is refused, and nothing is saved", async () => {
+        const fx = await reportFixture({ students: ["Ada"] });
+        await expect(fx.enterScores("Maths", { Ada: { CA: 12.25, Exam: 50 } })).rejects.toThrow("CA can have at most one decimal place (e.g. 12.5)");
+        expect(await M.resultModel.countDocuments()).toBe(0);
+    });
+
+    test("a total stored before rounding is read rounded, and still ties", async () => {
+        const fx = await reportFixture({ students: ["Ada", "Bola"] });
+        await fx.enterScores("Maths", { Ada: { CA: 12.1, Exam: 50.2 }, Bola: { CA: 12.3, Exam: 50 } });
+        await M.resultModel.collection.updateOne({ student: fx.studentIds.Ada }, { $set: { "Terms.0.subjects.0.Total": 62.300000000000004 } });
+        const report = await fx.build();
+        expect(fx.subjectFor(report, "Ada", "Maths").Total).toBe(62.3);
+        expect(fx.subjectFor(report, "Ada", "Maths").position).toBe(fx.subjectFor(report, "Bola", "Maths").position);
+    });
+
+    test("the student's total across subjects is rounded too", async () => {
+        const fx = await reportFixture({ format: [{ name: "Exam", maxScore: 100, order: 1 }], students: ["Ada"], subjects: ["Maths", "English", "Biology"] });
+        await fx.enterScores("Maths", { Ada: { Exam: 0.1 } });
+        await fx.enterScores("English", { Ada: { Exam: 0.2 } });
+        await fx.enterScores("Biology", { Ada: { Exam: 60.4 } });
+        expect(fx.reportFor(await fx.build(), "Ada").summary.totalScore).toBe(60.7);
+    });
+
     test("subject total, the student's total and average, and subjects graded of offered", async () => {
         const fx = await reportFixture({ students: ["Ada"], subjects: ["Maths", "English", "Biology"] });
         await fx.enterScores("Maths", { Ada: { CA: 30, Exam: 50 } });
