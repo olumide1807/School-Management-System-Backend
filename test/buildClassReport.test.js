@@ -116,12 +116,10 @@ describe("attendance-derived scores", () => {
         expect(fx.reportFor(report, "Ada").attendance.mark).toBe(9);
     });
 
-    // Counted as present but excluded from the days total: 11 of 10
-    test.failing("KNOWN BUG: a day the auto-marker flagged and a teacher then recorded never pushes the score past the maximum", async () => {
-        // The register (controller/attendance.js) doesn't clear autoMarked
-        // when a teacher records a day the auto-marker already flagged, so
-        // such records exist with autoMarked: true and status "present".
-        // Whether that day counts or not, the mark is 10 of 10 here.
+    test("a record still flagged auto-marked is left out on both sides, whatever its status", async () => {
+        // The register now clears the flag when a person records a day
+        // (test/attendanceRegister.test.js). Records written before that
+        // can be flagged and "present"; they mustn't score 11 out of 10.
         const fx = await reportFixture({ format: ATTENDANCE_FORMAT, students: ["Ada"] });
         await fx.enterScores("Maths", { Ada: { CA: 20, Exam: 50 } });
         const days = schoolDays(11);

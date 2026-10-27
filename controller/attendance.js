@@ -161,7 +161,10 @@ exports.markClassAttendance = asyncHandler(async (req, res, next) => {
                         sessionId: session._id,
                         termId: term._id,
                         recordedBy: req.user.id,
-                        recordedByName: recorderName
+                        recordedByName: recorderName,
+                        // A person took the register for this day: it's no
+                        // longer one the auto-marker filled in
+                        autoMarked: false
                     }
                 },
                 upsert: true
@@ -305,6 +308,8 @@ exports.updateAttendanceRecord = asyncHandler(async (req, res, next) => {
         record.status = req.body.status;
         record.recordedBy = req.user.id;
         record.recordedByName = getRecorderName(req.user);
+        // Recorded by a person now, even if the auto-marker created it
+        record.autoMarked = false;
         await record.save();
 
         successResponse(res, 200, "Attendance updated", record);

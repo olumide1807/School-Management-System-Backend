@@ -109,13 +109,18 @@ async function buildClassReport(schoolId, classArmId, termId, sessionId) {
     attendance.forEach((a) => {
         const sid = String(a.studentId);
         if (!attendanceByStudent[sid]) {
-            attendanceByStudent[sid] = { present: 0, absent: 0, total: 0, autoMarked: 0 };
+            attendanceByStudent[sid] = { present: 0, absent: 0, total: 0, autoMarked: 0, presentScored: 0 };
         }
         const rec = attendanceByStudent[sid];
         if (a.status === "present") rec.present++;
         if (a.status === "absent") rec.absent++;
         rec.total++;
         if (a.autoMarked) rec.autoMarked++;
+        // Days a person recorded. A record still flagged autoMarked is left
+        // out of the score on both sides, whatever its status — before the
+        // register cleared the flag, a teacher could record such a day as
+        // present and it scored 11 out of 10.
+        else if (a.status === "present") rec.presentScored++;
     });
 
     // Auto-marked days are excluded from the score — a missed register
@@ -126,7 +131,7 @@ async function buildClassReport(schoolId, classArmId, termId, sessionId) {
         if (!a) return null;
         const scoredTotal = a.total - a.autoMarked;
         if (scoredTotal === 0) return null;
-        return Math.round((a.present / scoredTotal) * attendanceDef.maxScore);
+        return Math.round((a.presentScored / scoredTotal) * attendanceDef.maxScore);
     };
 
     // --- Stored scores and comments ---
@@ -279,7 +284,7 @@ async function buildClassReport(schoolId, classArmId, termId, sessionId) {
                 outOf: null,
             },
             attendance: {
-                ...(attendanceByStudent[sid] || { present: 0, absent: 0, total: 0, autoMarked: 0 }),
+                ...(({ presentScored, ...counts }) => counts)(attendanceByStudent[sid] || { present: 0, absent: 0, total: 0, autoMarked: 0, presentScored: 0 }),
                 mark: attMark,
             },
             comments: {
