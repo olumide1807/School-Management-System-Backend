@@ -263,6 +263,9 @@ Tests live in `test/`.
   the real `middleware/error.js`. `asSchool` / `asParent` / `asStudent`
   build the `req.user` the auth middleware would.
 - `test/helpers/factories.js` creates minimal valid documents.
+- `test/helpers/reportFixture.js` builds a whole class for report-card tests:
+  format, grade bands, subjects, students, scores (entered through the real
+  `POST /result/batch` handler) and register records.
 - Write real documents and query them; don't stub models. Hand-written
   stubs only agree with your reading of a query — the database checks the
   query itself. To store something the models would refuse (an old record),
@@ -278,4 +281,13 @@ What's covered, and why it matters:
   the duplicate-reference 409 and `confirmDuplicate`.
 - `reopenedDays.test.js` — "a closed day that has started can't be
   reopened", through `findReopenedDays` and the calendar endpoints.
+- `closesSchool.test.js` — the helper and the `$ne: false` query agree for
+  every stored value and type.
+- `buildClassReport.test.js` — competition ranking, totals and averages,
+  attendance-derived scores, score snapshots, grade bands, school scoping.
+
+**`test.failing` marks a known bug.** The test asserts the correct
+behaviour and passes only while the code is still wrong; once the bug is
+fixed it fails, and should become an ordinary `test`. Never make one pass by
+changing its expectation. `grep -rn "KNOWN BUG" test/` lists them.
 
