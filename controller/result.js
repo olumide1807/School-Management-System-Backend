@@ -381,6 +381,15 @@ exports.upsertComments = asyncHandler(async (req, res, next) => {
         const student = await studentModel.findOne({ _id: studentId, schoolId });
         if (!student) return next(new ErrorResponse("Student not found", 404));
 
+        // Scoped, so a comment can't create a result filed under another
+        // school's term or session; theirs gets the same 404 as no such id
+        const [term, session] = await Promise.all([
+            termModel.findOne({ _id: termId, schoolId }),
+            sessionModel.findOne({ _id: sessionId, schoolId }),
+        ]);
+        if (!term) return next(new ErrorResponse("Term not found!", 404));
+        if (!session) return next(new ErrorResponse("Session not found!", 404));
+
         const classArm = await classArmModel.findOne({ _id: student.classArmId, schoolId });
         const isFormTeacher =
             String(classArm?.assignedTeacher || "") === String(req.user.id);
