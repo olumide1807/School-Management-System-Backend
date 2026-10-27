@@ -251,25 +251,62 @@ describe("grade bands", () => {
         expect(fx.subjectFor(await fx.build(), "Ada", "Maths").grade).toBe(grade);
     });
 
-    // Bands are matched on from ≤ total ≤ to; with integer bands a total in
-    // the gap (69 < 69.5 < 70) matches none and gets no grade
-    test.failing.each([[69.5, "B"], [59.5, "C"], [39.5, "F"]])("KNOWN BUG: a decimal total between bands (%s) still gets a grade: %s", async (total, grade) => {
+    // A band is the highest one whose lower bound the total reaches, so a
+    // decimal total between integer bands (69 < 69.5 < 70) still has one
+    test.each([[69.5, "B"], [59.5, "C"], [49.9, "D"], [39.5, "F"], [99.5, "A"]])("a decimal total between bands (%s) gets the band below: %s", async (total, grade) => {
         const fx = await reportFixture({ format: [{ name: "Exam", maxScore: 100, order: 1 }], students: ["Ada"] });
         await fx.enterScores("Maths", { Ada: { Exam: total } });
-        expect(fx.subjectFor(await fx.build(), "Ada", "Maths").grade).toBe(grade);
+        expect(fx.subjectFor(await fx.build(), "Ada", "Maths")).toMatchObject({ grade, complete: true });
     });
 
-    // Same gap, with the schoolSettings defaults: any average in (74, 75),
-    // (59, 60) or (44, 45) gets no teacher or principal comment
-    test.failing("KNOWN BUG: an average between the default comment bands (74.5) still gets the default comment", async () => {
-        // Averages are to one decimal; the default bands are 60–74 and 75–100
-        const fx = await reportFixture({ students: ["Ada"], subjects: ["Maths", "English"] });
-        await fx.enterScores("Maths", { Ada: { CA: 30, Exam: 44 } });
-        await fx.enterScores("English", { Ada: { CA: 30, Exam: 45 } });
+    test("bands stored in any order give the same grades", async () => {
+        const shuffled = [
+            { grade: "C", remark: "Credit", from: 50, to: 59 }, { grade: "A", remark: "Excellent", from: 70, to: 100 },
+            { grade: "F", remark: "Fail", from: 0, to: 39 }, { grade: "B", remark: "Very good", from: 60, to: 69 },
+            { grade: "D", remark: "Pass", from: 40, to: 49 },
+        ];
+        const fx = await reportFixture({ format: [{ name: "Exam", maxScore: 100, order: 1 }], students: ["A", "B", "C"], bands: shuffled });
+        await fx.enterScores("Maths", { A: { Exam: 70 }, B: { Exam: 69.5 }, C: { Exam: 12 } });
+        const report = await fx.build();
+        expect(["A", "B", "C"].map((n) => fx.subjectFor(report, n, "Maths").grade)).toEqual(["A", "B", "F"]);
+    });
+
+    // The default comment bands are 75–100, 60–74, 45–59, 0–44; averages are
+    // to one decimal, so every average between them used to get no comment
+    test.each([
+        [74.5, "A good result. You can do even better.", "A commendable result. Keep working hard."],
+        [59.5, "A fair result. More effort is needed.", "An average result. Improvement is expected."],
+        [44.5, "A weak result. Please see me.", "A poor result. Parents should see the principal."],
+        [75, "An excellent result. Keep it up.", "An outstanding performance. Well done."],
+    ])("an average of %s gets the default comments of the band it reaches", async (average, teacher, principal) => {
+        const fx = await reportFixture({ format: [{ name: "Exam", maxScore: 100, order: 1 }], students: ["Ada"] });
+        await fx.enterScores("Maths", { Ada: { Exam: average } });
         const ada = fx.reportFor(await fx.build(), "Ada");
-        expect(ada.summary.average).toBe(74.5);
-        expect(ada.comments.teacher).not.toBe("");
-        expect(ada.comments.principal).not.toBe("");
+        expect(ada.summary.average).toBe(average);
+        expect(ada.comments).toMatchObject({ teacher, principal, teacherIsOverride: false, principalIsOverride: false });
+    });
+});
+
+describe("bandFor", () => {
+    const { bandFor } = require("../utils/buildClassReport");
+    const from = (b) => b.from;
+    const bands = [{ g: "A", from: 70 }, { g: "B", from: 60 }, { g: "F", from: 0 }];
+
+    test("the highest lower bound the value reaches", () => {
+        expect(bandFor(bands, 69.99, from).g).toBe("B");
+        expect(bandFor(bands, 70, from).g).toBe("A");
+        expect(bandFor(bands, 0, from).g).toBe("F");
+        expect(bandFor(bands, 120, from).g).toBe("A");
+    });
+
+    test("overlapping bands: the higher lower bound wins", () => {
+        expect(bandFor([{ g: "wide", from: 50 }, { g: "narrow", from: 65 }], 70, from).g).toBe("narrow");
+    });
+
+    test("below every band, or no value: no band", () => {
+        expect(bandFor([{ g: "C", from: 40 }], 39.9, from)).toBeNull();
+        expect(bandFor(bands, null, from)).toBeNull();
+        expect(bandFor([], 50, from)).toBeNull();
     });
 });
 

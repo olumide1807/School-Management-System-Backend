@@ -29,6 +29,22 @@ const rankBy = (items) => {
 
 const round1 = (n) => Math.round(n * 10) / 10;
 
+// The band a value falls in: the one with the highest lower bound the value
+// reaches. Only lower bounds matter, so there's no gap between bands
+// whatever they are — with integer bands 60–69 and 70–100, a total of 69.5
+// is in 60–69. (Matching from ≤ value ≤ to left 69.5 in no band at all.)
+// Used for grade bands and the banded report comments alike.
+const bandFor = (bands, value, lowerBoundOf) => {
+    if (value === null || value === undefined || !Array.isArray(bands)) return null;
+    let best = null;
+    for (const band of bands) {
+        const from = lowerBoundOf(band);
+        if (typeof from !== "number" || Number.isNaN(from) || value < from) continue;
+        if (!best || from > lowerBoundOf(best)) best = band;
+    }
+    return best;
+};
+
 /**
  * Builds every student's report for one class arm and term.
  *
@@ -72,9 +88,7 @@ async function buildClassReport(schoolId, classArmId, termId, sessionId) {
 
     const bands = gradeDoc?.grades || [];
     const gradeFor = (total) => {
-        const band = bands.find(
-            (g) => total >= (g.scoreRange?.from ?? 0) && total <= (g.scoreRange?.to ?? 100)
-        );
+        const band = bandFor(bands, total, (g) => g.scoreRange?.from ?? 0);
         return band
             ? { grade: band.grade, remark: band.remark, color: band.color }
             : { grade: null, remark: null, color: null };
@@ -82,7 +96,7 @@ async function buildClassReport(schoolId, classArmId, termId, sessionId) {
 
     const bandedComment = (commentBands, average) => {
         if (average === null || !commentBands?.length) return "";
-        const band = commentBands.find((b) => average >= b.from && average <= b.to);
+        const band = bandFor(commentBands, average, (b) => b.from);
         return band?.text || "";
     };
 
@@ -342,4 +356,4 @@ async function buildClassReport(schoolId, classArmId, termId, sessionId) {
     };
 }
 
-module.exports = { buildClassReport, rankBy, round1 };
+module.exports = { buildClassReport, rankBy, round1, bandFor };
