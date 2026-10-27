@@ -11,6 +11,7 @@ const M = require("../models");
 const { useTestDatabase } = require("./helpers/db");
 const { reportFixture, schoolDays } = require("./helpers/reportFixture");
 const f = require("./helpers/factories");
+const { buildClassReport } = require("../utils/buildClassReport");
 
 useTestDatabase();
 
@@ -243,12 +244,52 @@ describe("school scoping", () => {
         expect(report.assessments.map((a) => a.name)).toEqual(["CA", "Exam", "Attendance"]);
     });
 
-    // termModel.findById / sessionModel.findById aren't scoped by schoolId
-    test.failing("KNOWN BUG: another school's term or session: no report", async () => {
+    test("another school's term or session: no report", async () => {
         const fx = await reportFixture();
         const other = f.id();
         const otherSession = await f.session(other);
         const otherTerm = await f.term(other, otherSession._id);
         expect(await fx.build({ termId: otherTerm._id })).toBeNull();
+        expect(await buildClassReport(fx.school, fx.arm._id, fx.term._id, otherSession._id)).toBeNull();
+    });
+
+    // Which document comes back when a filter is missing schoolId depends on
+    // the order Mongo returns them, so a test that plants another school's
+    // document can pass by luck. Assert the filters instead: every query
+    // buildClassReport makes is scoped to this school, and none looks a
+    // document up by id alone.
+    test("every query it makes is filtered by this school", async () => {
+        const fx = await reportFixture({ format: ATTENDANCE_FORMAT, students: ["Ada"] });
+        await fx.enterScores("Maths", { Ada: { CA: 20, Exam: 50 } });
+
+        const models = {
+            classArm: M.classArmModel, specificSubject: M.specificSubjectModel, term: M.termModel, session: M.sessionModel,
+            student: M.studentModel, result: M.resultModel, assessment: M.assessmentModel, grade: M.gradeModel,
+            attendance: M.studentAttendanceModel, settings: M.schoolSettingsModel, publication: M.resultPublicationModel, staff: M.staffModel,
+        };
+        const calls = [];
+        const spies = [];
+        for (const [name, model] of Object.entries(models)) {
+            for (const method of ["find", "findOne", "findById", "countDocuments", "aggregate"]) {
+                spies.push(jest.spyOn(model, method).mockImplementation(function (...args) {
+                    calls.push({ model: name, method, filter: args[0] });
+                    return jest.requireActual("mongoose").Model[method].apply(this, args);
+                }));
+            }
+        }
+        try {
+            await fx.build();
+        } finally {
+            spies.forEach((s) => s.mockRestore());
+        }
+
+        const school = String(fx.school);
+        const scopedTo = (filter) => String(filter?.schoolId ?? filter?.school ?? "");
+        expect(calls.length).toBeGreaterThan(5);
+        expect(calls.filter((c) => c.method === "findById")).toEqual([]);
+        expect(calls.filter((c) => scopedTo(c.filter) !== school).map((c) => `${c.model}.${c.method}`)).toEqual([]);
+        // the two that passed by luck before, named explicitly
+        expect(calls.some((c) => c.model === "assessment" && scopedTo(c.filter) === school)).toBe(true);
+        expect(calls.some((c) => c.model === "grade" && scopedTo(c.filter) === school)).toBe(true);
     });
 });

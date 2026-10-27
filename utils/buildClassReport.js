@@ -36,7 +36,7 @@ const round1 = (n) => Math.round(n * 10) / 10;
  * disagree — a position or average computed two different ways would
  * be worse than either.
  *
- * Returns null if the class arm doesn't belong to the school.
+ * Returns null if the class arm, term or session doesn't belong to the school.
  */
 async function buildClassReport(schoolId, classArmId, termId, sessionId) {
     const classArm = await classArmModel.findOne({ _id: classArmId, schoolId });
@@ -48,8 +48,10 @@ async function buildClassReport(schoolId, classArmId, termId, sessionId) {
 
     const [term, session, students, results, format, gradeDoc, attendance, settings, publication, formTeacher] =
         await Promise.all([
-            termModel.findById(termId),
-            sessionModel.findById(sessionId),
+            // Scoped: a term or session id from another school must not
+            // label (or open) this school's report
+            termModel.findOne({ _id: termId, schoolId }),
+            sessionModel.findOne({ _id: sessionId, schoolId }),
             studentModel
                 .find({ classArmId, schoolId })
                 .select("firstName surName otherName studentID gender profilePicture status"),
