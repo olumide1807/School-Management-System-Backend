@@ -484,6 +484,15 @@ exports.publishResults = asyncHandler(async (req, res, next) => {
         const classArm = await classArmModel.findOne({ _id: classArmId, schoolId });
         if (!classArm) return next(new ErrorResponse("Class not found!", 404));
 
+        // Scoped: a publication must name this school's term and session,
+        // not any well-formed id (the read side would just never match it)
+        const [term, session] = await Promise.all([
+            termModel.findOne({ _id: termId, schoolId }),
+            sessionModel.findOne({ _id: sessionId, schoolId }),
+        ]);
+        if (!term) return next(new ErrorResponse("Term not found!", 404));
+        if (!session) return next(new ErrorResponse("Session not found!", 404));
+
         const existing = await resultPublicationModel.findOne({
             schoolId, classArm: classArmId, term: termId, session: sessionId,
         });
