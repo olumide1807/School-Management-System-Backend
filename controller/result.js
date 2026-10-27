@@ -72,10 +72,12 @@ exports.batchUpsertResults = asyncHandler(async (req, res, next) => {
             ));
         }
 
-        // --- Term and session must exist ---
+        // --- Term and session must exist in this school ---
+        // Scoped, so scores can't be stored against another school's term
+        // or session (the same check buildClassReport makes on the way out)
         const [term, session] = await Promise.all([
-            termModel.findById(termId),
-            sessionModel.findById(sessionId),
+            termModel.findOne({ _id: termId, schoolId }),
+            sessionModel.findOne({ _id: sessionId, schoolId }),
         ]);
         if (!term) return next(new ErrorResponse("Term not found!", 404));
         if (!session) return next(new ErrorResponse("Session not found!", 404));
