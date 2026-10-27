@@ -3,10 +3,8 @@ const ErrorResponse = require("../utils/errorResponse");
 const { successResponse } = require("../utils/successResponse");
 const {
     resultModel,
-    sessionModel,
     studentModel,
     classArmModel,
-    termModel,
     assessmentModel,
     specificSubjectModel,
     studentAttendanceModel,
@@ -19,6 +17,7 @@ const gradeModel = require("../models/grade");
 const { buildClassReport } = require("../utils/buildClassReport");
 
 const { roundScore, hasScorePrecision } = require("../utils/scorePrecision");
+const { resolveTermInSession } = require("../utils/termSession");
 
 const getSchoolId = (req) => (req.user.schoolName ? req.user.id : req.user.schoolId);
 const isAdminRole = (req) => req.user.userType === "admin" || !!req.user.schoolName;
@@ -72,15 +71,10 @@ exports.batchUpsertResults = asyncHandler(async (req, res, next) => {
             ));
         }
 
-        // --- Term and session must exist in this school ---
-        // Scoped, so scores can't be stored against another school's term
-        // or session (the same check buildClassReport makes on the way out)
-        const [term, session] = await Promise.all([
-            termModel.findOne({ _id: termId, schoolId }),
-            sessionModel.findOne({ _id: sessionId, schoolId }),
-        ]);
-        if (!term) return next(new ErrorResponse("Term not found!", 404));
-        if (!session) return next(new ErrorResponse("Session not found!", 404));
+        // --- Term and session: this school's, and the term part of the session ---
+        // Otherwise scores are stored where no report will ever read them
+        const termCheck = await resolveTermInSession(schoolId, termId, sessionId);
+        if (termCheck.error) return next(termCheck.error);
 
         // --- The assessment format for this class level defines valid scores ---
         const format = await assessmentModel.findOne({
@@ -257,6 +251,10 @@ exports.getClassSubjectResults = asyncHandler(async (req, res, next) => {
             }
         }
 
+        // A mismatched pair would just return nothing; say why instead
+        const termCheck = await resolveTermInSession(schoolId, termId, sessionId);
+        if (termCheck.error) return next(termCheck.error);
+
         const results = await resultModel.find({
             school: schoolId,
             classArm: classArmId,
@@ -344,6 +342,11 @@ exports.getClassReport = asyncHandler(async (req, res, next) => {
             ));
         }
  
+        // Same answer as score entry for a term or session that isn't this
+        // school's, or a term from another session
+        const termCheck = await resolveTermInSession(schoolId, termId, sessionId);
+        if (termCheck.error) return next(termCheck.error);
+
         const report = await buildClassReport(schoolId, classArmId, termId, sessionId);
         if (!report) return next(new ErrorResponse("Term or session not found!", 404));
  
@@ -381,14 +384,11 @@ exports.upsertComments = asyncHandler(async (req, res, next) => {
         const student = await studentModel.findOne({ _id: studentId, schoolId });
         if (!student) return next(new ErrorResponse("Student not found", 404));
 
-        // Scoped, so a comment can't create a result filed under another
-        // school's term or session; theirs gets the same 404 as no such id
-        const [term, session] = await Promise.all([
-            termModel.findOne({ _id: termId, schoolId }),
-            sessionModel.findOne({ _id: sessionId, schoolId }),
-        ]);
-        if (!term) return next(new ErrorResponse("Term not found!", 404));
-        if (!session) return next(new ErrorResponse("Session not found!", 404));
+        // This school's term and session, the term part of the session: a
+        // comment can create the result document, so it mustn't file one
+        // under another school's term or a session nothing reads it from
+        const termCheck = await resolveTermInSession(schoolId, termId, sessionId);
+        if (termCheck.error) return next(termCheck.error);
 
         const classArm = await classArmModel.findOne({ _id: student.classArmId, schoolId });
         const isFormTeacher =
@@ -484,14 +484,10 @@ exports.publishResults = asyncHandler(async (req, res, next) => {
         const classArm = await classArmModel.findOne({ _id: classArmId, schoolId });
         if (!classArm) return next(new ErrorResponse("Class not found!", 404));
 
-        // Scoped: a publication must name this school's term and session,
-        // not any well-formed id (the read side would just never match it)
-        const [term, session] = await Promise.all([
-            termModel.findOne({ _id: termId, schoolId }),
-            sessionModel.findOne({ _id: sessionId, schoolId }),
-        ]);
-        if (!term) return next(new ErrorResponse("Term not found!", 404));
-        if (!session) return next(new ErrorResponse("Session not found!", 404));
+        // A publication must name this school's term and session, the term
+        // part of the session — the read side would never match anything else
+        const termCheck = await resolveTermInSession(schoolId, termId, sessionId);
+        if (termCheck.error) return next(termCheck.error);
 
         const existing = await resultPublicationModel.findOne({
             schoolId, classArm: classArmId, term: termId, session: sessionId,

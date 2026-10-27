@@ -53,7 +53,8 @@ const bandFor = (bands, value, lowerBoundOf) => {
  * disagree — a position or average computed two different ways would
  * be worse than either.
  *
- * Returns null if the class arm, term or session doesn't belong to the school.
+ * Returns null if the class arm, term or session doesn't belong to the school,
+ * or the term isn't part of the session.
  */
 async function buildClassReport(schoolId, classArmId, termId, sessionId) {
     const classArm = await classArmModel.findOne({ _id: classArmId, schoolId });
@@ -86,6 +87,9 @@ async function buildClassReport(schoolId, classArmId, termId, sessionId) {
         ]);
 
     if (!term || !session) return null;
+    // A term from another session: its results are filed elsewhere, so
+    // there's no report to build from this pair (utils/termSession.js)
+    if (String(term.sessionId) !== String(session._id)) return null;
 
     const bands = gradeDoc?.grades || [];
     const gradeFor = (total) => {
