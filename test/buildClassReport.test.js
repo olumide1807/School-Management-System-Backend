@@ -163,9 +163,7 @@ describe("scores keep the assessment format they were entered under", () => {
         expect(maths.grade).toBe("A");
     });
 
-    // The attendance component is computed from the CURRENT format, not
-    // snapshotted: the past term gains "Attendance 10/10" and 85 becomes 95
-    test.failing("KNOWN BUG: adding an attendance component later doesn't change a past term's report", async () => {
+    test("adding an attendance component later doesn't change a past term's report", async () => {
         const fx = await reportFixture({ students: ["Ada"] });
         await fx.enterScores("Maths", { Ada: { CA: 35, Exam: 50 } });
         await fx.attendance("Ada", schoolDays(10).map((d) => [d, "present"]));
@@ -174,9 +172,75 @@ describe("scores keep the assessment format they were entered under", () => {
 
         // Next term the school adds attendance to the format
         await fx.setFormat(ATTENDANCE_FORMAT);
-        const after = fx.subjectFor(await fx.build(), "Ada", "Maths");
+        const report = await fx.build();
+        const after = fx.subjectFor(report, "Ada", "Maths");
         expect(plain(after.scores)).toEqual(plain(before.scores));
         expect(after).toMatchObject({ complete: true, Total: 85, grade: "A" });
+        expect(fx.reportFor(report, "Ada").attendance.mark).toBeNull();
+    });
+
+    test("removing the attendance component later doesn't change a past term's report", async () => {
+        const fx = await reportFixture({ format: ATTENDANCE_FORMAT, students: ["Ada"] });
+        await fx.enterScores("Maths", { Ada: { CA: 20, Exam: 50 } });
+        await fx.attendance("Ada", schoolDays(10).map((d, i) => [d, i < 8 ? "present" : "absent"]));
+        await fx.setFormat([{ name: "CA", maxScore: 40, order: 1 }, { name: "Exam", maxScore: 60, order: 2 }]);
+        const report = await fx.build();
+        expect(plain(fx.subjectFor(report, "Ada", "Maths").scores)).toContainEqual({ name: "Attendance", maxScore: 10, score: 8 });
+        expect(fx.subjectFor(report, "Ada", "Maths").Total).toBe(78);
+        expect(fx.reportFor(report, "Ada").attendance.mark).toBe(8);
+    });
+
+    test("re-weighting the attendance component later doesn't re-weight a past term's", async () => {
+        const fx = await reportFixture({ format: ATTENDANCE_FORMAT, students: ["Ada"] });
+        await fx.enterScores("Maths", { Ada: { CA: 20, Exam: 50 } });
+        await fx.attendance("Ada", schoolDays(10).map((d) => [d, "present"]));
+        await fx.setFormat([{ name: "CA", maxScore: 20, order: 1 }, { name: "Exam", maxScore: 60, order: 2 }, { name: "Attendance", maxScore: 20, order: 3, source: "attendance" }]);
+        expect(fx.subjectFor(await fx.build(), "Ada", "Maths").Total).toBe(80);
+    });
+
+    test("a past term's column headings are the format it was assessed under, not today's", async () => {
+        const fx = await reportFixture({ format: ATTENDANCE_FORMAT, students: ["Ada"] });
+        await fx.enterScores("Maths", { Ada: { CA: 20, Exam: 50 } });
+        await fx.setFormat([{ name: "Test", maxScore: 40, order: 1 }, { name: "Exam", maxScore: 60, order: 2 }]);
+        const report = await fx.build();
+        expect(report.assessments).toEqual([
+            { name: "CA", maxScore: 30, source: "manual" },
+            { name: "Exam", maxScore: 60, source: "manual" },
+            { name: "Attendance", maxScore: 10, source: "attendance" },
+        ]);
+        // every heading has its score
+        const names = plain(fx.subjectFor(report, "Ada", "Maths").scores).map((x) => x.name);
+        expect(report.assessments.every((h) => h.name === "Attendance" || names.includes(h.name))).toBe(true);
+    });
+
+    test("a term with nothing entered yet is headed by the current format", async () => {
+        const fx = await reportFixture({ format: ATTENDANCE_FORMAT, students: ["Ada"] });
+        expect((await fx.build()).assessments.map((a) => a.name)).toEqual(["CA", "Exam", "Attendance"]);
+    });
+
+    test("entering scores saves the format they were entered under, attendance component included", async () => {
+        const fx = await reportFixture({ format: ATTENDANCE_FORMAT, students: ["Ada"] });
+        await fx.enterScores("Maths", { Ada: { CA: 20, Exam: 50 } });
+        const doc = await M.resultModel.findOne({ student: fx.studentIds.Ada }).lean();
+        expect(doc.Terms[0].subjects[0].format).toEqual([
+            { name: "CA", maxScore: 30, order: 1, source: "manual" },
+            { name: "Exam", maxScore: 60, order: 2, source: "manual" },
+            { name: "Attendance", maxScore: 10, order: 3, source: "attendance" },
+        ]);
+    });
+
+    // Entries saved before snapshots existed carry no format. Nothing records
+    // what format they were assessed under, so they're read against the
+    // current one — the old behaviour, until the stored data is backfilled.
+    test("an entry saved before snapshots existed is read against the current format", async () => {
+        const fx = await reportFixture({ students: ["Ada"] });
+        await fx.enterScores("Maths", { Ada: { CA: 35, Exam: 50 } });
+        await M.resultModel.collection.updateMany({}, { $unset: { "Terms.$[].subjects.$[].format": "" } });
+        await fx.setFormat(ATTENDANCE_FORMAT);
+        await fx.attendance("Ada", schoolDays(10).map((d) => [d, "present"]));
+        const report = await fx.build();
+        expect(fx.subjectFor(report, "Ada", "Maths").Total).toBe(95);
+        expect(report.assessments.map((a) => a.name)).toEqual(["CA", "Exam", "Attendance"]);
     });
 });
 

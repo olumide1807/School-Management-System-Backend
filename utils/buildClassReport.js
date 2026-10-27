@@ -86,10 +86,18 @@ async function buildClassReport(schoolId, classArmId, termId, sessionId) {
         return band?.text || "";
     };
 
-    const definitions = format
-        ? [...format.assessments].sort((a, b) => (a.order || 0) - (b.order || 0))
-        : [];
-    const attendanceDef = definitions.find((d) => d.source === "attendance") || null;
+    // --- Which assessment format applies ---
+    // Every stored subject entry carries the format it was entered under
+    // (models/result.js), so a past term is read the way it was assessed:
+    // a later format change can't add, drop or re-weight its attendance
+    // component or change its column headings. Entries saved before those
+    // snapshots existed have no format; only they fall back to the current
+    // one.
+    const byOrder = (a, b) => (a.order || 0) - (b.order || 0);
+    const currentDefinitions = format ? [...format.assessments].sort(byOrder) : [];
+    const definitionsOf = (entry) =>
+        Array.isArray(entry?.format) && entry.format.length > 0 ? [...entry.format].sort(byOrder) : currentDefinitions;
+    const attendanceDefIn = (defs) => defs.find((d) => d.source === "attendance") || null;
 
     const subjectList = specifics.map((sp) => ({
         subjectId: String(sp.subjectId?._id || sp.subjectId),
@@ -112,7 +120,7 @@ async function buildClassReport(schoolId, classArmId, termId, sessionId) {
 
     // Auto-marked days are excluded from the score — a missed register
     // is the school's omission, not the child's
-    const attendanceMarkFor = (sid) => {
+    const attendanceMarkFor = (sid, attendanceDef) => {
         if (!attendanceDef) return null;
         const a = attendanceByStudent[sid];
         if (!a) return null;
@@ -138,11 +146,23 @@ async function buildClassReport(schoolId, classArmId, termId, sessionId) {
         };
     });
 
+    // The term's definitions, for its column headings and each student's
+    // attendance mark: the formats its stored entries were entered under
+    // (in order, each component once), or the current format if nothing
+    // has been entered yet
+    const storedEntries = Object.values(scoreIndex).flatMap((bySubject) => Object.values(bySubject));
+    const termDefinitions = (() => {
+        if (storedEntries.length === 0) return currentDefinitions;
+        const seen = new Map();
+        storedEntries.forEach((e) => definitionsOf(e).forEach((d) => { if (!seen.has(d.name)) seen.set(d.name, d); }));
+        return [...seen.values()].sort(byOrder);
+    })();
+    const termAttendanceDef = attendanceDefIn(termDefinitions);
+
     // --- Effective totals ---
     const effective = {};
     students.forEach((st) => {
         const sid = String(st._id);
-        const attMark = attendanceMarkFor(sid);
         effective[sid] = {};
 
         subjectList.forEach(({ subjectId }) => {
@@ -156,6 +176,9 @@ async function buildClassReport(schoolId, classArmId, termId, sessionId) {
             let total = entry.Total;
             let complete = true;
 
+            // The attendance component this entry was assessed with
+            const attendanceDef = attendanceDefIn(definitionsOf(entry));
+            const attMark = attendanceMarkFor(sid, attendanceDef);
             if (attendanceDef) {
                 if (attMark === null) {
                     complete = false;
@@ -209,7 +232,7 @@ async function buildClassReport(schoolId, classArmId, termId, sessionId) {
     // --- Per-student reports ---
     const reports = students.map((st) => {
         const sid = String(st._id);
-        const attMark = attendanceMarkFor(sid);
+        const attMark = attendanceMarkFor(sid, termAttendanceDef);
 
         const subjects = subjectList.map(({ subjectId, subjectName }) => {
             const e = effective[sid][subjectId];
@@ -295,7 +318,7 @@ async function buildClassReport(schoolId, classArmId, termId, sessionId) {
             : null,
         term: { _id: term._id, termName: term.termName },
         session: { _id: session._id, sessionName: session.sessionName },
-        assessments: definitions.map((a) => ({
+        assessments: termDefinitions.map((a) => ({
             name: a.name,
             maxScore: a.maxScore,
             source: a.source || "manual",

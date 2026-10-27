@@ -164,11 +164,18 @@ exports.batchUpsertResults = asyncHandler(async (req, res, next) => {
         let created = 0;
         let updated = 0;
 
+        // The format these scores are entered under, attendance component
+        // and all, saved with them (see models/result.js)
+        const formatSnapshot = [...format.assessments]
+            .sort((a, b) => (a.order || 0) - (b.order || 0))
+            .map((d) => ({ name: d.name, maxScore: d.maxScore, order: d.order || 0, source: d.source || "manual" }));
+
         for (const p of prepared) {
             const subjectEntry = {
                 subject: subjectId,
                 specificSubject: specific._id,
                 scores: p.scores,
+                format: formatSnapshot,
                 Total: p.total,
                 enteredBy: req.user.id,
                 enteredAt: new Date(),
