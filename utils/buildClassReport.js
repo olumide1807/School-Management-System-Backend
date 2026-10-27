@@ -182,6 +182,7 @@ async function buildClassReport(schoolId, classArmId, termId, sessionId) {
         return [...seen.values()].sort(byOrder);
     })();
     const termAttendanceDef = attendanceDefIn(termDefinitions);
+    const manualNamesIn = (defs) => defs.filter((d) => d.source !== "attendance").map((d) => d.name);
 
     // --- Effective totals ---
     const effective = {};
@@ -192,7 +193,10 @@ async function buildClassReport(schoolId, classArmId, termId, sessionId) {
         subjectList.forEach(({ subjectId }) => {
             const entry = scoreIndex[sid]?.[subjectId];
             if (!entry) {
-                effective[sid][subjectId] = { entered: false, complete: false, scores: [], total: null };
+                effective[sid][subjectId] = {
+                    entered: false, complete: false, scores: [], total: null,
+                    missingComponents: manualNamesIn(termDefinitions),
+                };
                 return;
             }
 
@@ -222,6 +226,12 @@ async function buildClassReport(schoolId, classArmId, termId, sessionId) {
                 complete,
                 scores,
                 total: complete ? total : null,
+                // Components of the format it was entered under that have no
+                // score yet. Such a subject is still totalled, graded and
+                // ranked on what's there — fine while marks are going in;
+                // publishing checks it (controller/result.js)
+                missingComponents: manualNamesIn(definitionsOf(entry))
+                    .filter((name) => !entry.scores.some((sc) => sc.name === name)),
             };
         });
     });
@@ -266,6 +276,7 @@ async function buildClassReport(schoolId, classArmId, termId, sessionId) {
                 return {
                     subjectId, subjectName, entered: false, complete: false,
                     scores: [], Total: null, grade: null, remark: null, position: null,
+                    missingComponents: e.missingComponents,
                 };
             }
             if (!e.complete) {
@@ -273,6 +284,7 @@ async function buildClassReport(schoolId, classArmId, termId, sessionId) {
                     subjectId, subjectName, entered: true, complete: false,
                     scores: e.scores, Total: null, grade: null,
                     remark: "Attendance not recorded", position: null,
+                    missingComponents: e.missingComponents,
                 };
             }
 
@@ -285,6 +297,7 @@ async function buildClassReport(schoolId, classArmId, termId, sessionId) {
                 remark: g.remark,
                 color: g.color,
                 position: subjectPositions[subjectId]?.[sid] ?? null,
+                missingComponents: e.missingComponents,
             };
         });
 

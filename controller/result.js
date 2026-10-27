@@ -446,6 +446,63 @@ exports.upsertComments = asyncHandler(async (req, res, next) => {
 // Add resultPublicationModel to the models destructure at the top.
 // ============================================================
 
+// What's missing from a class report, by subject: for each student still
+// on the roll, the components of the format their scores were entered
+// under that have no score, or that the subject has no scores at all.
+// [{ subjectId, subjectName, students: [{ studentId, name, studentID, noScores, missing }] }]
+const incompleteScores = (report) => {
+    const active = report.reports.filter((r) => r.student.status !== "deactivated");
+    return report.subjects
+        .map(({ subjectId, subjectName }) => ({
+            subjectId,
+            subjectName,
+            students: active
+                .map((r) => {
+                    const s = r.subjects.find((x) => x.subjectId === subjectId);
+                    if (!s || (s.entered && s.missingComponents.length === 0)) return null;
+                    return {
+                        studentId: r.student._id,
+                        name: [r.student.firstName, r.student.otherName, r.student.surName].filter(Boolean).join(" "),
+                        studentID: r.student.studentID,
+                        noScores: !s.entered,
+                        missing: s.entered ? s.missingComponents : [],
+                    };
+                })
+                .filter(Boolean),
+            classSize: active.length,
+        }))
+        .filter((subject) => subject.students.length > 0)
+        .map(({ classSize, ...subject }) => ({ ...subject, wholeClass: subject.students.length === classSize }));
+};
+
+// One line per subject, students grouped by what they're missing:
+// "Maths: Exam missing for Ada Obi and Bola Ade; no scores for Chidi Eze."
+const incompleteScoresMessage = (incomplete) => {
+    const names = (list) => {
+        const shown = list.slice(0, 5).map((st) => st.name);
+        const more = list.length - shown.length;
+        const all = more > 0 ? [...shown, `${more} more`] : shown;
+        return all.length > 1 ? `${all.slice(0, -1).join(", ")} and ${all[all.length - 1]}` : all[0];
+    };
+    const lines = incomplete.map((subject) => {
+        if (subject.wholeClass && subject.students.every((st) => st.noScores)) {
+            return `${subject.subjectName}: no scores for anyone in the class.`;
+        }
+        const groups = new Map();
+        subject.students.forEach((st) => {
+            const what = st.noScores ? "no scores" : `${st.missing.join(", ")} missing`;
+            groups.set(what, [...(groups.get(what) || []), st]);
+        });
+        const parts = [...groups].map(([what, list]) => `${what} for ${names(list)}`);
+        return `${subject.subjectName}: ${parts.join("; ")}.`;
+    });
+    return [
+        "Some scores haven't been entered, so these results would be published from partial marks — totals, grades and positions would count only what's there.",
+        ...lines,
+        "Enter the missing scores first. If a subject genuinely wasn't taken, you can publish anyway.",
+    ].join("\n");
+};
+
 // ============================================================
 // PUBLISH A CLASS'S RESULTS FOR A TERM
 // POST /result/publish
@@ -497,6 +554,25 @@ exports.publishResults = asyncHandler(async (req, res, next) => {
             return next(new ErrorResponse(
                 "These results are already published", 400
             ));
+        }
+
+        // Publishing turns "what's entered so far" into the school's
+        // statement about each child, and a subject with components
+        // missing is still totalled, graded and ranked on what's there. So
+        // refuse while anything is missing, naming it; the admin can go
+        // ahead with confirmIncomplete: true (the boolean only) — a school
+        // may genuinely have a subject nobody sat.
+        if (req.body.confirmIncomplete !== true) {
+            const report = await buildClassReport(schoolId, classArmId, termId, sessionId);
+            const incomplete = report ? incompleteScores(report) : [];
+            if (incomplete.length > 0) {
+                return res.status(409).json({
+                    success: false,
+                    code: "INCOMPLETE_SCORES",
+                    error: incompleteScoresMessage(incomplete),
+                    incomplete,
+                });
+            }
         }
 
         await resultPublicationModel.create({

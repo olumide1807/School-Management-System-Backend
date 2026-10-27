@@ -39,12 +39,14 @@ describe("publication is scoped to the school", () => {
 
     test("this school's class, term and session: published", async () => {
         const fx = await reportFixture();
+        await fx.enterScores("Maths", { Ada: { CA: 30, Exam: 50 } });
         expect((await publish(fx)).status).toBe(201);
         expect(await M.resultPublicationModel.countDocuments({ schoolId: fx.school, term: fx.term._id })).toBe(1);
     });
 
     test("every lookup it makes is filtered by this school", async () => {
         const fx = await reportFixture();
+        await fx.enterScores("Maths", { Ada: { CA: 30, Exam: 50 } });
         let r;
         const calls = await recordQueries(
             [M.classArmModel, M.termModel, M.sessionModel, M.resultPublicationModel],
