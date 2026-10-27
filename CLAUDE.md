@@ -4,7 +4,7 @@ Express + Mongoose API for a multi-tenant school management system aimed at
 Nigerian schools. The React frontend lives in a **separate repo**
 (`School-Management-System-Frontend`, usually a sibling folder on disk).
 
-- Run: `npm run dev` (nodemon)
+- Run: `npm run dev` (nodemon) · Test: `npm test` (see §9)
 - Port: **5002**, hardcoded in `app.listen(5002, ...)` in `server.js`.
   `process.env.PORT` is read into a global and only used in the log line — it
   does not actually change the port. Don't "fix" this without checking the
@@ -237,3 +237,37 @@ Don't be surprised by these; don't silently "fix" them either.
   no assessment format returns `200` with `null`, so the teacher's score sheet
   can say "not set up yet" instead of failing.
 - Joi validators live in `middleware/validation/`, grouped by resource.
+
+---
+
+## 9. Tests
+
+Jest, against a throwaway in-memory MongoDB (`mongodb-memory-server`; the
+mongod binary is downloaded once and cached). `npm test` runs everything.
+Tests live in `test/`.
+
+- `test/setup/globalSetup.js` starts one mongod per run; each test file
+  gets its own database on it (`test/helpers/db.js` → `useTestDatabase()`),
+  emptied after every test. **Tests never read `config/config.env`**, and
+  the helper refuses any database that isn't on localhost.
+- `test/helpers/http.js` → `run(handler, req)` calls a controller the way
+  the router does and returns `{ status, body }`, sending errors through
+  the real `middleware/error.js`. `asSchool` / `asParent` / `asStudent`
+  build the `req.user` the auth middleware would.
+- `test/helpers/factories.js` creates minimal valid documents.
+- Write real documents and query them; don't stub models. Hand-written
+  stubs only agree with your reading of a query — the database checks the
+  query itself. To store something the models would refuse (an old record),
+  write to `Model.collection` directly.
+
+What's covered, and why it matters:
+- `portal.test.js` — the guardianship 404 is identical for every reason a
+  parent can't see a child; results reach families only for published
+  terms, and a parent gets their own child's report, not the class's.
+- `buildFeeStatement.test.js` — kobo arithmetic, every status,
+  `complete:false` for amounts it can't read, school scoping.
+- `payments.test.js` — amount and method validation on `createPayment`;
+  the duplicate-reference 409 and `confirmDuplicate`.
+- `reopenedDays.test.js` — "a closed day that has started can't be
+  reopened", through `findReopenedDays` and the calendar endpoints.
+
