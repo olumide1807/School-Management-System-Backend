@@ -1,6 +1,8 @@
 // utils
 const { getStaffByEmail } = require("./../dbCrudFunctions/staff");
-const generateRandomPassword = require("../utils/generateRandomPassword");
+// The one password generator for every account type (staff, parents,
+// students, super admins): crypto, unambiguous alphabet, ~49 bits
+const { generatePortalPassword } = require("../utils/generatePortalPassword");
 const { GeneratePassword, ValidatePassword } = require("../utils");
 const ErrorResponse = require("../utils/errorResponse");
 const { sendTokenResponse } = require("../utils/sendResponseToken");
@@ -68,7 +70,7 @@ exports.createStaff = asyncHandler(async (req, res, next) => {
     }
 
     // Generate random password and hash it
-    const password = generateRandomPassword();
+    const password = generatePortalPassword();
     const hashedPassword = await GeneratePassword(password);
     others.password = hashedPassword;
 
@@ -908,7 +910,7 @@ exports.resetStaffPassword = asyncHandler(async (req, res, next) => {
     }
 
     // Generate new random password
-    const newPassword = generateRandomPassword();
+    const newPassword = generatePortalPassword();
     const hashedPassword = await GeneratePassword(newPassword);
     staff.password = hashedPassword;
     await staff.save();

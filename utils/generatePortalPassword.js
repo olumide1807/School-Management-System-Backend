@@ -1,6 +1,7 @@
 const crypto = require("crypto");
 
-// Initial or reset password for a parent or student portal account.
+// Every generated password: initial or reset passwords for staff, parents,
+// students and super admins. One generator, so they're all made one way.
 //
 // These are mostly read aloud — office staff phone them to parents with no
 // email — so the alphabet is single-case with the confusable characters
