@@ -9,6 +9,8 @@ const run = (handler, req) =>
         const res = {
             statusCode: 200,
             status(code) { this.statusCode = code; return this; },
+            cookies: {},
+            cookie(name, value) { this.cookies[name] = value; return this; },
             json(body) { resolve({ status: this.statusCode, body }); return this; },
         };
         const next = (err) => {

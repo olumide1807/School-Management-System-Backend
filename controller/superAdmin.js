@@ -176,9 +176,11 @@ exports.loginSuperAdmin = asyncHandler(async (req, res, next) => {
       emailAddress: email,
     });
 
-    // if not, error
+    // No such account gets the same answer as a wrong password, as on the
+    // other logins — a 404 here told anyone which emails have super-admin
+    // accounts, one request at a time
     if (!superAdmin) {
-      return next(new ErrorResponse("Invalid credentials", 404));
+      return next(new ErrorResponse("Invalid credentials", 401));
     }
 
     // check if the password is correct
