@@ -909,7 +909,7 @@ exports.resetStaffPassword = asyncHandler(async (req, res, next) => {
 
     // Generate new random password
     const newPassword = generateRandomPassword();
-    const hashedPassword = await hashPassword(newPassword);
+    const hashedPassword = await GeneratePassword(newPassword);
     staff.password = hashedPassword;
     await staff.save();
 
