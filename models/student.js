@@ -58,8 +58,10 @@ const studentSchema = new mongoose.Schema({
     mustChangePassword: { type: Boolean, default: true },
     status: { type: String, enum: ["active", "deactivated"], required: true, default: "active" },
     schoolId: { type: mongoose.Schema.Types.ObjectId, ref: "SuperAdmin" },
-    resetPasswordToken: String,
-    resetPasswordExpire: Date,
+    // A reset token is a credential: never returned unless a query asks
+    // for it with .select("+resetPasswordToken +resetPasswordExpire")
+    resetPasswordToken: { type: String, select: false },
+    resetPasswordExpire: { type: Date, select: false },
 }, { timestamps: true });
 
 const Student = mongoose.model('Student', studentSchema);

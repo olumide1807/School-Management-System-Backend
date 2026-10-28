@@ -52,8 +52,10 @@ const parentSchema = new mongoose.Schema({
     },
     password: { type: String, select: false },
     mustChangePassword: { type: Boolean, default: true },
-    resetPasswordToken: String,
-    resetPasswordExpire: Date,
+    // A reset token is a credential: never returned unless a query asks
+    // for it with .select("+resetPasswordToken +resetPasswordExpire")
+    resetPasswordToken: { type: String, select: false },
+    resetPasswordExpire: { type: Date, select: false },
 }, { timestamps: true });
 
 const Parent = mongoose.model('Parent', parentSchema);
