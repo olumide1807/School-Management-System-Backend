@@ -10,6 +10,9 @@ const sendEmail = require("../utils/sendgrid");
 const { sendTokenResponse } = require("../utils/sendResponseToken");
 const { successResponse } = require("../utils/successResponse");
 const { isValidMongoId } = require("../utils/isValidMongoObjectId")
+// The one password generator (crypto, unambiguous alphabet). Never
+// Math.random: its output is predictable from a few earlier values.
+const { generatePortalPassword } = require("../utils/generatePortalPassword");
 
 //middlewares
 const { asyncHandler } = require("../middleware");
@@ -68,7 +71,7 @@ exports.registerSuperAdmin = asyncHandler(async (req, res, next) => {
     }
 
     // Generate a random password
-    const randomPassword = Math.random().toString(36).substring(2, 9);
+    const randomPassword = generatePortalPassword();
     console.log("Generated password for new Super Admin:", randomPassword);
 
     // Hash the password
@@ -121,7 +124,7 @@ exports.acceptApplication = asyncHandler(async (req, res, next) => {
     }
 
     // generate a random password
-    const randomPassword = Math.random().toString(36).substring(2, 9);
+    const randomPassword = generatePortalPassword();
     console.log(".................randomPassword............. ", randomPassword);
 
     // hash the random password
