@@ -62,6 +62,22 @@ Rules baked into the middleware:
 A teacher-facing route that 403s is usually missing `"academic"` in its
 `allowedRoles` — that's how `timetable-grid/settings` broke.
 
+### Forgot password (`controller/passwords.js`, super admins and staff)
+`forgotpassword` → `verifyOTP` → `resetpassword`:
+- **forgotpassword** issues a 6-digit code (stored hashed on the account,
+  10 minutes, replaces any earlier one) and always answers the same 200,
+  whether or not the email has an account — never reveal which do.
+- **verifyOTP** spends the code and returns a single-use `resetToken`
+  (stored as a SHA-256 hash, 15 minutes).
+- **resetpassword** takes `{ token, password }` and nothing else. Setting
+  the password and clearing the token is one atomic update.
+- Limits are **per account**: 5 wrong guesses kill a code; 5 codes per
+  account per rolling 24 hours. Each is enforced by one conditional
+  update, so parallel requests can't get past it.
+- Reset and OTP fields are `select: false` on every user model. Ask for
+  them by name (`.select("+resetPasswordToken")`) or filter on them; never
+  return them.
+
 ### Privilege escalation
 `PUT /staff/:id` is self-service and **must** keep its field whitelist
 (`selfEditableFields` in `controller/staff.js`, mirrored by the Joi schema in

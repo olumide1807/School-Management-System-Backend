@@ -104,15 +104,19 @@ const superAdminSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    // A reset token is a credential: never returned unless a query asks
+    // for it with .select("+resetPasswordToken +resetPasswordExpire")
     resetPasswordToken: {
       type: String,
       default: null,
+      select: false,
     },
     // A Date, so the reset flow can compare it with now (it was a String,
     // which can't be compared as a time; no stored value was ever kept)
     resetPasswordExpire: {
       type: Date,
       default: null,
+      select: false,
     },
     // Forgot-password OTP state (controller/passwords.js). Hidden: the code
     // is a credential while it's live. The hash, its expiry, wrong guesses

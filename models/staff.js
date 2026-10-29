@@ -55,8 +55,10 @@ const staffSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "SuperAdmin",
     },
-    resetPasswordToken: String,
-    resetPasswordExpire: Date,
+    // A reset token is a credential: never returned unless a query asks
+    // for it with .select("+resetPasswordToken +resetPasswordExpire")
+    resetPasswordToken: { type: String, select: false },
+    resetPasswordExpire: { type: Date, select: false },
     // Forgot-password OTP state (controller/passwords.js). Hidden: the code
     // is a credential while it's live. The hash, its expiry, wrong guesses
     // against it, and when codes were requested (for the per-account limit).

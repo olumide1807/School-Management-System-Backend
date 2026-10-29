@@ -62,3 +62,63 @@ describe("the models hide them by default, and still give them up when asked", (
         expect(asked.resetPasswordExpire).toEqual(TOKEN.resetPasswordExpire);
     });
 });
+
+// Staff and super admins are where reset tokens and OTPs actually exist
+// (the forgot-password flow covers them). Same rule: hidden unless a query
+// asks for them by name.
+describe("staff and super-admin reset state is hidden too", () => {
+    const staff = require("../controller/staff");
+    const passwords = require("../controller/passwords");
+    const RESET_FIELDS = /resetPassword(Token|Expire)|resetOtp/;
+
+    // A live reset token, and a live code requested after it
+    async function staffMidReset() {
+        const schoolId = f.id();
+        const doc = await M.staffModel.create({ schoolId, firstName: "Tunde", surname: "Bello", emailAddress: "tunde@greenhill.ng", staffType: "academic", password: "hash" });
+        await M.staffModel.collection.updateOne({ _id: doc._id }, {
+            $set: {
+                resetPasswordToken: "f".repeat(64), resetPasswordExpire: new Date(Date.now() + 600000),
+                resetOtpHash: "e".repeat(64), resetOtpExpire: new Date(Date.now() + 600000), resetOtpAttempts: 1, resetOtpRequests: [new Date()],
+            },
+        });
+        return { schoolId, doc };
+    }
+
+    test("GET /staff (all staff) doesn't return them", async () => {
+        const { schoolId } = await staffMidReset();
+        const r = await run(staff.getAllStaffs, { ...asSchool(schoolId), query: {} });
+        expect(r.status).toBe(200);
+        expect(r.body.data).toHaveLength(1);
+        expect(RESET_FIELDS.test(JSON.stringify(r.body))).toBe(false);
+    });
+
+    test("a staff document loaded any ordinary way doesn't carry them", async () => {
+        const { doc } = await staffMidReset();
+        const plain = await M.staffModel.findById(doc._id).lean();
+        expect(RESET_FIELDS.test(JSON.stringify(plain))).toBe(false);
+        const asked = await M.staffModel.findById(doc._id).select("+resetPasswordToken +resetPasswordExpire").lean();
+        expect(asked.resetPasswordToken).toBe("f".repeat(64));
+    });
+
+    test("a super admin document doesn't carry them", async () => {
+        const id = f.id();
+        await M.SuperAdminModel.collection.insertOne({
+            _id: id, emailAddress: "owner@greenhill.ng", schoolName: "Green Hill",
+            resetPasswordToken: "f".repeat(64), resetPasswordExpire: new Date(Date.now() + 600000), resetOtpHash: "e".repeat(64),
+        });
+        const plain = await M.SuperAdminModel.findById(id).lean();
+        expect(RESET_FIELDS.test(JSON.stringify(plain))).toBe(false);
+    });
+
+    test("the reset flow still works with everything hidden", async () => {
+        jest.spyOn(console, "log").mockImplementation(() => {});
+        const { doc } = await staffMidReset();
+        // A token the flow issued itself
+        await M.staffModel.collection.updateOne({ _id: doc._id }, {
+            $set: { resetPasswordToken: require("crypto").createHash("sha256").update("a".repeat(64)).digest("hex") },
+        });
+        const r = await run(passwords.resetPassword, { body: { token: "a".repeat(64), password: "a-new-password" } });
+        expect(r.status).toBe(200);
+        jest.restoreAllMocks();
+    });
+});
