@@ -35,7 +35,15 @@ async function staffMember(email = EMAIL) {
         password: await bcrypt.hash("old-password", 4),
     });
 }
-const forgot = (email = EMAIL) => run(passwords.forgotPassword, { body: { email } });
+// The email (and, with email unconfigured, the console line carrying the
+// code) goes out after the response; let it finish before reading the code
+const settle = () => new Promise((r) => setTimeout(r, 0));
+const forgot = async (email = EMAIL) => {
+    const r = await run(passwords.forgotPassword, { body: { email } });
+    await settle();
+    return r;
+};
+const otpsLogged = (email = EMAIL) => logged.filter((l) => l.includes(`[DEV] OTP for ${email}:`)).length;
 const lastOtp = (email = EMAIL) => {
     const re = new RegExp(`\\[DEV\\] OTP for ${email.replace(/\./g, "\\.")}: (\\d+)`);
     const hits = logged.map((l) => l.match(re)).filter(Boolean);
@@ -192,19 +200,24 @@ describe("OTPs resist guessing", () => {
         expect((await verify(second)).status).toBe(200);
     });
 
-    test("five codes per account per day; the sixth is refused, and other accounts aren't affected", async () => {
+    test("five codes per account per day; the sixth issues none, and other accounts aren't affected", async () => {
         await staffMember();
         await staffMember("kemi@greenhill.ng");
         for (let i = 0; i < 5; i++) expect((await forgot()).status).toBe(200);
+        const fifthCode = lastOtp();
         const sixth = await forgot();
-        expect(sixth.status).toBe(429);
-        expect((await forgot("kemi@greenhill.ng")).status).toBe(200);
+        // The same answer as ever (see "forgot-password doesn't reveal…"), but no code
+        expect(sixth.status).toBe(200);
+        expect(otpsLogged()).toBe(5);
+        expect((await verify(fifthCode)).status).toBe(200);
+        await forgot("kemi@greenhill.ng");
+        expect(otpsLogged("kemi@greenhill.ng")).toBe(1);
     });
 
     test("parallel requests can't get past the daily limit", async () => {
         const doc = await staffMember();
-        const results = await Promise.all(Array.from({ length: 12 }, () => forgot()));
-        expect(results.filter((r) => r.status === 200)).toHaveLength(5);
+        await Promise.all(Array.from({ length: 12 }, () => forgot()));
+        expect(otpsLogged()).toBe(5);
         expect((await otpState(doc._id)).resetOtpRequests).toHaveLength(5);
     });
 
@@ -214,5 +227,38 @@ describe("OTPs resist guessing", () => {
         await M.staffModel.collection.updateOne({ _id: doc._id }, { $set: { resetOtpRequests: Array(5).fill(yesterday) } });
         expect((await forgot()).status).toBe(200);
         expect((await otpState(doc._id)).resetOtpRequests).toHaveLength(1);
+    });
+});
+
+describe("forgot-password doesn't reveal which emails have accounts", () => {
+    const SENT = "If that email belongs to an account, a 6-digit code has been sent to it. It lasts 10 minutes, and you can request up to 5 codes a day.";
+
+    test("an unknown email, a real one, and a real one over its daily limit get the same answer", async () => {
+        await staffMember();
+        const known = await forgot();
+        const unknown = await forgot("nobody@example.com");
+        for (let i = 0; i < 5; i++) await forgot();
+        const limited = await forgot();
+        expect(known).toEqual({ status: 200, body: { success: true, message: SENT, data: null } });
+        expect(unknown).toEqual(known);
+        expect(limited).toEqual(known);
+        expect(otpsLogged("nobody@example.com")).toBe(0);
+    });
+
+    test("verifying for an unknown email gets the same answer as a real account with no code", async () => {
+        await staffMember();
+        const unknown = await verify("123456", "nobody@example.com");
+        const noCode = await verify("123456");
+        expect(unknown.status).toBe(400);
+        expect(unknown).toEqual(noCode);
+    });
+
+    test("a request is answered exactly once", async () => {
+        await staffMember();
+        let answers = 0;
+        const res = { status() { return this; }, cookie() { return this; }, json() { answers++; return this; } };
+        await passwords.forgotPassword({ body: { email: EMAIL } }, res, (e) => { throw e; });
+        await settle();
+        expect(answers).toBe(1);
     });
 });

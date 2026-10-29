@@ -70,6 +70,7 @@ describe("the forgot-password flow accepts the OTP it generates", () => {
         expect((await register("owner@greenhill.ng")).status).toBe(200);
 
         const forgot = await run(passwords.forgotPassword, { body: { email: "owner@greenhill.ng" } });
+        await new Promise((r) => setTimeout(r, 0)); // the email goes out after the response
         expect(forgot.status).toBe(200);
         const otp = logged.map((l) => l.match(/\[DEV\] OTP for owner@greenhill\.ng: (\d+)/)).find(Boolean)?.[1];
         expect(otp).toMatch(/^[1-9]\d{5}$/);

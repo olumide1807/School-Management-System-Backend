@@ -39,6 +39,13 @@ const MAX_OTP_ATTEMPTS = 5;
 const MAX_OTP_REQUESTS = 5;
 const OTP_REQUEST_WINDOW_MS = 24 * 60 * 60 * 1000;
 
+// forgotPassword's only answer. It's the same whether the account exists,
+// whether a code was issued or the daily limit stopped it, and whether the
+// email went — anything else tells a stranger which emails have accounts.
+const CODE_SENT =
+  `If that email belongs to an account, a 6-digit code has been sent to it. ` +
+  `It lasts ${OTP_MINUTES} minutes, and you can request up to ${MAX_OTP_REQUESTS} codes a day.`;
+
 // ============================ FORGOT PASSWORD ========================================
 exports.forgotPassword = asyncHandler(async (req, res, next) => {
   try {
@@ -59,9 +66,7 @@ exports.forgotPassword = asyncHandler(async (req, res, next) => {
       userType = "staff";
     }
 
-    if (!user) {
-      return next(new ErrorResponse('User not found', 404));
-    }
+    if (!user) return successResponse(res, 200, CODE_SENT);
 
     // Issue a 6-digit code, replacing any earlier one, unless this account
     // has already had MAX_OTP_REQUESTS in the last 24 hours. The check and
@@ -86,33 +91,22 @@ exports.forgotPassword = asyncHandler(async (req, res, next) => {
         },
       }]
     );
-    if (!issued) {
-      return next(new ErrorResponse(
-        "Too many codes have been requested for this account today. Please try again tomorrow.", 429
-      ));
-    }
+    // Over the daily limit: no code, and the same answer as ever
+    if (!issued) return successResponse(res, 200, CODE_SENT);
 
-    // configure the notification system.
-    const message = `You are receiving this email because you have requested for a One-Time Password(OTP), which is ${otp}.`;
-    const sendToEmail = user.emailAddress;
+    // Answer before sending: waiting on the email service only for real
+    // accounts would make the response time say which emails exist
+    successResponse(res, 200, CODE_SENT);
 
-    // Send email with OTP
-    const sendMessage = await sendEmail(
-      sendToEmail,
-      "Password reset token",
-      message,
-      `<p>${message}</p>`
-    );
-
-    // If email fails, still return success with the OTP for development
-    if (!sendMessage.status) {
-      console.log(`[DEV] OTP for ${user.emailAddress}: ${otp}`);
-      return successResponse(res, 200, `OTP generated. Check server console.`);
-    }
-
-    successResponse(res, 200, "Message sent successfully! Please check your email address for the OTP");
-
-    successResponse(res, 200, "Message sent successfully!. Please check your email address for the OTP");
+    const message = `Your password reset code is ${otp}. It lasts ${OTP_MINUTES} minutes. If you didn't ask for it, you can ignore this email.`;
+    sendEmail(user.emailAddress, "Password reset code", message, `<p>${message}</p>`)
+      .then((sent) => {
+        // Email isn't configured yet (CLAUDE.md §7): the code goes to the
+        // server console instead, never to the response
+        if (!sent?.status) console.log(`[DEV] OTP for ${user.emailAddress}: ${otp}`);
+      })
+      .catch(() => console.log(`[DEV] OTP for ${user.emailAddress}: ${otp}`));
+    return;
   } catch (err) {
     console.error(err);
     return next(new ErrorResponse("Email could not be sent", 500));
@@ -136,13 +130,14 @@ exports.verifyOTP = asyncHandler(async (req, res, next) => {
       return next(new ErrorResponse('No email detected! It should be sent as a query param', 404));
     }
 
-    let user = await SuperAdmin.findOne({ emailAddress: req.query.email });
-    if (!user) user = await staffModel.findOne({ emailAddress: req.query.email });
-    if (!user) return next(new ErrorResponse('User not found', 404));
-    const Model = user.constructor;
     const noCode = () => new ErrorResponse(
       "There's no valid code for this account: it has expired, been used, or had too many wrong attempts. Request a new code.", 400
     );
+    let user = await SuperAdmin.findOne({ emailAddress: req.query.email });
+    if (!user) user = await staffModel.findOne({ emailAddress: req.query.email });
+    // An unknown email gets the same answer as an account with no live code
+    if (!user) return next(noCode());
+    const Model = user.constructor;
 
     // Spend one attempt before comparing. The increment only happens while
     // the code is live and has attempts left, and it's atomic, so parallel
