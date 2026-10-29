@@ -19,12 +19,25 @@ const SuperAdmin = require("../models/superAdmin");
 const { staffModel } = require("../models");
 
 const crypto = require("crypto");
-const NodeCache = require('node-cache');
-const cache = new NodeCache();
 
-// Reset tokens are stored hashed: the database never holds one that works
+// Reset tokens and OTPs are stored hashed: the database never holds one
+// that works
 const sha256 = (value) => crypto.createHash("sha256").update(String(value)).digest("hex");
+// Salted with the account, so the same code on two accounts hashes apart
+const otpHash = (userId, otp) => sha256(`${userId}:${otp}`);
+
 const RESET_TOKEN_MINUTES = 15;
+
+// Guessing limits, per ACCOUNT (an IP limit is sidestepped by using more
+// IPs). A code is 6 digits (900,000 possibilities) and lives 10 minutes;
+// 5 wrong guesses kill it; 5 codes per account per rolling 24 hours. So at
+// most 25 guesses per account per day — about 1 in 36,000 a day, ~1% over
+// a year of non-stop attack. The cost: someone requesting codes for your
+// email can hold up your reset for a day.
+const OTP_MINUTES = 10;
+const MAX_OTP_ATTEMPTS = 5;
+const MAX_OTP_REQUESTS = 5;
+const OTP_REQUEST_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 // ============================ FORGOT PASSWORD ========================================
 exports.forgotPassword = asyncHandler(async (req, res, next) => {
@@ -50,9 +63,34 @@ exports.forgotPassword = asyncHandler(async (req, res, next) => {
       return next(new ErrorResponse('User not found', 404));
     }
 
-    // Generate a random 4-digit OTP
+    // Issue a 6-digit code, replacing any earlier one, unless this account
+    // has already had MAX_OTP_REQUESTS in the last 24 hours. The check and
+    // the issue are one conditional update, so parallel requests can't get
+    // past the limit.
     const otp = generateRandomOTP();
-    cache.set(user.id, otp.toString(), 600);
+    const now = new Date();
+    const recent = {
+      $filter: {
+        input: { $ifNull: ["$resetOtpRequests", []] },
+        cond: { $gt: ["$$this", new Date(now.getTime() - OTP_REQUEST_WINDOW_MS)] },
+      },
+    };
+    const issued = await user.constructor.findOneAndUpdate(
+      { _id: user._id, $expr: { $lt: [{ $size: recent }, MAX_OTP_REQUESTS] } },
+      [{
+        $set: {
+          resetOtpRequests: { $concatArrays: [recent, [now]] },
+          resetOtpHash: otpHash(user._id, otp),
+          resetOtpExpire: new Date(now.getTime() + OTP_MINUTES * 60 * 1000),
+          resetOtpAttempts: 0,
+        },
+      }]
+    );
+    if (!issued) {
+      return next(new ErrorResponse(
+        "Too many codes have been requested for this account today. Please try again tomorrow.", 429
+      ));
+    }
 
     // configure the notification system.
     const message = `You are receiving this email because you have requested for a One-Time Password(OTP), which is ${otp}.`;
@@ -101,27 +139,57 @@ exports.verifyOTP = asyncHandler(async (req, res, next) => {
     let user = await SuperAdmin.findOne({ emailAddress: req.query.email });
     if (!user) user = await staffModel.findOne({ emailAddress: req.query.email });
     if (!user) return next(new ErrorResponse('User not found', 404));
-    const otp = cache.take(user.id);
-
-    if (!otp) {
-      return next(new ErrorResponse('OTP not generated or expired, please regenerate OTP', 404));
-    }
-
-    // Check if the provided OTP matches the stored OTP. The OTP has already
-    // been taken from the cache, so it can't be tried again either way.
-    if (otp != req.body.otp) {
-      return next(new ErrorResponse('Incorrect OTP!', 400));
-    }
-
-    // The OTP is spent. In its place, a single-use reset token: random,
-    // returned only to whoever verified, stored only as a hash, and short-
-    // lived. resetPassword accepts that token and nothing else, so knowing
-    // the email isn't enough to walk into someone else's reset.
-    const resetToken = crypto.randomBytes(32).toString("hex");
-    await user.constructor.updateOne(
-      { _id: user._id },
-      { $set: { resetPasswordToken: sha256(resetToken), resetPasswordExpire: new Date(Date.now() + RESET_TOKEN_MINUTES * 60 * 1000) } }
+    const Model = user.constructor;
+    const noCode = () => new ErrorResponse(
+      "There's no valid code for this account: it has expired, been used, or had too many wrong attempts. Request a new code.", 400
     );
+
+    // Spend one attempt before comparing. The increment only happens while
+    // the code is live and has attempts left, and it's atomic, so parallel
+    // guesses can't get more than MAX_OTP_ATTEMPTS between them.
+    const attempt = await Model.findOneAndUpdate(
+      {
+        _id: user._id,
+        resetOtpHash: { $type: "string" },
+        resetOtpExpire: { $gt: new Date() },
+        resetOtpAttempts: { $lt: MAX_OTP_ATTEMPTS },
+      },
+      { $inc: { resetOtpAttempts: 1 } },
+      { new: true }
+    ).select("+resetOtpHash +resetOtpAttempts");
+    if (!attempt) return next(noCode());
+
+    if (otpHash(user._id, req.body.otp) !== attempt.resetOtpHash) {
+      const left = MAX_OTP_ATTEMPTS - attempt.resetOtpAttempts;
+      if (left <= 0) {
+        // Out of attempts: the code is gone, and a new one must be requested
+        await Model.updateOne(
+          { _id: user._id, resetOtpHash: attempt.resetOtpHash },
+          { $unset: { resetOtpHash: "", resetOtpExpire: "", resetOtpAttempts: "" } }
+        );
+        return next(new ErrorResponse("Too many wrong codes. Request a new code.", 400));
+      }
+      return next(new ErrorResponse(`That code isn't right. ${left} attempt${left === 1 ? "" : "s"} left.`, 400));
+    }
+
+    // Right code. Spend it and issue a single-use reset token in the same
+    // update — conditional on the code still being this one, so a code
+    // can't be spent twice. The token is random, returned only to whoever
+    // verified, stored only as a hash, and short-lived; resetPassword
+    // accepts it and nothing else, so knowing the email isn't enough to
+    // walk into someone else's reset.
+    const resetToken = crypto.randomBytes(32).toString("hex");
+    const spent = await Model.findOneAndUpdate(
+      { _id: user._id, resetOtpHash: attempt.resetOtpHash },
+      {
+        $unset: { resetOtpHash: "", resetOtpExpire: "", resetOtpAttempts: "" },
+        $set: {
+          resetPasswordToken: sha256(resetToken),
+          resetPasswordExpire: new Date(Date.now() + RESET_TOKEN_MINUTES * 60 * 1000),
+        },
+      }
+    );
+    if (!spent) return next(noCode());
 
     successResponse(res, 200, "Please proceed to resetting your password.", {
       resetToken,

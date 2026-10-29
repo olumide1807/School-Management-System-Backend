@@ -114,6 +114,13 @@ const superAdminSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    // Forgot-password OTP state (controller/passwords.js). Hidden: the code
+    // is a credential while it's live. The hash, its expiry, wrong guesses
+    // against it, and when codes were requested (for the per-account limit).
+    resetOtpHash: { type: String, select: false },
+    resetOtpExpire: { type: Date, select: false },
+    resetOtpAttempts: { type: Number, select: false },
+    resetOtpRequests: { type: [Date], select: false, default: undefined },
   },
   { timestamps: true }
 );

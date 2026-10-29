@@ -34,12 +34,12 @@ const register = (emailAddress = `owner${++seq}@greenhill.ng`) => {
 };
 
 describe("generateRandomOTP", () => {
-    test("is always a whole number from 1000 to 9999 — the shape verifyOTP compares", () => {
+    test("is always six digits, 100000–999999 — what verifyOTP accepts", () => {
         for (let i = 0; i < 5000; i++) {
             const otp = generateRandomOTP();
             expect(Number.isInteger(otp)).toBe(true);
-            expect(otp).toBeGreaterThanOrEqual(1000);
-            expect(otp).toBeLessThanOrEqual(9999);
+            expect(otp).toBeGreaterThanOrEqual(100000);
+            expect(otp).toBeLessThanOrEqual(999999);
         }
     });
 
@@ -49,16 +49,15 @@ describe("generateRandomOTP", () => {
         expect(draws.size).toBeGreaterThan(40);
     });
 
-    // Wrapping two bytes with % 9000 would make 1000–3535 about 14% more
-    // likely than the rest. Over 90,000 draws each thousand should get about
-    // 10,000; the bias would push the first three well past 10,600.
+    // Wrapping three bytes with % 900000 would make 100000–675999 come up
+    // 65.2% of the time instead of 64%. Over 200,000 draws the spread is
+    // about ±0.1%, so the bias would sit eleven standard deviations out.
     test("every value is equally likely — no modulo bias", () => {
-        const buckets = new Array(9).fill(0);
-        for (let i = 0; i < 90000; i++) buckets[Math.floor((generateRandomOTP() - 1000) / 1000)]++;
-        for (const count of buckets) {
-            expect(count).toBeGreaterThan(9500);
-            expect(count).toBeLessThan(10500);
-        }
+        const N = 200000;
+        let low = 0;
+        for (let i = 0; i < N; i++) if (generateRandomOTP() < 676000) low++;
+        expect(low / N).toBeGreaterThan(0.635);
+        expect(low / N).toBeLessThan(0.645);
     });
 });
 
@@ -73,7 +72,7 @@ describe("the forgot-password flow accepts the OTP it generates", () => {
         const forgot = await run(passwords.forgotPassword, { body: { email: "owner@greenhill.ng" } });
         expect(forgot.status).toBe(200);
         const otp = logged.map((l) => l.match(/\[DEV\] OTP for owner@greenhill\.ng: (\d+)/)).find(Boolean)?.[1];
-        expect(otp).toMatch(/^[1-9]\d{3}$/);
+        expect(otp).toMatch(/^[1-9]\d{5}$/);
 
         // The user types it; it arrives as a number (Joi.number())
         const verify = await run(passwords.verifyOTP, { body: { otp: Number(otp) }, query: { email: "owner@greenhill.ng" } });

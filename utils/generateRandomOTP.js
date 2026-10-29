@@ -1,23 +1,23 @@
 const crypto = require("crypto");
 
-// A one-time password for the forgot-password flow: a 4-digit number,
-// 1000–9999, as verifyOTP expects (controller/passwords.js stores it as a
-// string and compares it with the number the user types).
+// A one-time password for the forgot-password flow: a 6-digit number,
+// 100000–999999 (verifyOTP's validator requires exactly that).
 //
 // From crypto.randomBytes, never Math.random: V8's Math.random is
 // xorshift128+, whose state can be recovered from a handful of outputs —
 // and anyone who can predict an OTP can reset that account's password.
-const MIN = 1000;
-const RANGE = 9000; // 1000..9999
+const MIN = 100000;
+const RANGE = 900000; // 100000..999999
 
-// Two bytes give 0..65535. Values at or above the largest multiple of
-// RANGE that fits (63000) are drawn again rather than wrapped with %,
-// which would make the low OTPs more likely than the rest.
-const LIMIT = 65536 - (65536 % RANGE);
+// Three bytes give 0..16777215. Values at or above the largest multiple of
+// RANGE that fits are drawn again rather than wrapped with %, which would
+// make 100000–675999 about 5% more likely than the rest.
+const SPACE = 2 ** 24;
+const LIMIT = SPACE - (SPACE % RANGE);
 
 exports.generateRandomOTP = () => {
     for (;;) {
-        const n = crypto.randomBytes(2).readUInt16BE(0);
+        const n = crypto.randomBytes(3).readUIntBE(0, 3);
         if (n < LIMIT) return MIN + (n % RANGE);
     }
 };

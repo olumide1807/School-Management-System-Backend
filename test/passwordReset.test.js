@@ -131,3 +131,88 @@ describe("resetting needs the token, and nothing else will do", () => {
         expect((await login("old-password", "kemi@greenhill.ng")).status).toBe(200);
     });
 });
+
+describe("OTPs resist guessing", () => {
+    const wrong = (otp) => String(Number(otp) === 999999 ? 100000 : Number(otp) + 1);
+    const otpState = (id) => M.staffModel.collection.findOne({ _id: id });
+
+    test("a code is six digits and stored only as a hash", async () => {
+        const doc = await staffMember();
+        await forgot();
+        const otp = lastOtp();
+        expect(otp).toMatch(/^[1-9]\d{5}$/);
+        const raw = await otpState(doc._id);
+        expect(raw.resetOtpHash).toEqual(expect.any(String));
+        expect(raw.resetOtpHash).not.toContain(otp);
+    });
+
+    test("wrong guesses count down, and the fifth kills the code — even the right one fails after", async () => {
+        await staffMember();
+        await forgot();
+        const otp = lastOtp();
+        const answers = [];
+        for (let i = 0; i < 5; i++) answers.push((await verify(wrong(otp))).body.error);
+        expect(answers).toEqual([
+            "That code isn't right. 4 attempts left.",
+            "That code isn't right. 3 attempts left.",
+            "That code isn't right. 2 attempts left.",
+            "That code isn't right. 1 attempt left.",
+            "Too many wrong codes. Request a new code.",
+        ]);
+        const late = await verify(otp);
+        expect(late.status).toBe(400);
+        expect(late.body.error).toMatch(/^There's no valid code for this account/);
+    });
+
+    test("parallel guesses can't get more than five tries between them", async () => {
+        const doc = await staffMember();
+        await forgot();
+        const otp = lastOtp();
+        const results = await Promise.all(Array.from({ length: 20 }, () => verify(wrong(otp))));
+        const counted = results.filter((r) => /That code isn't right|Too many wrong codes/.test(r.body.error));
+        expect(counted.length).toBe(5);
+        expect((await verify(otp)).status).toBe(400);
+        expect((await otpState(doc._id)).resetOtpHash).toBeUndefined();
+    });
+
+    test("a code expires after ten minutes", async () => {
+        const doc = await staffMember();
+        await forgot();
+        await M.staffModel.collection.updateOne({ _id: doc._id }, { $set: { resetOtpExpire: new Date(Date.now() - 1000) } });
+        expect((await verify(lastOtp())).status).toBe(400);
+    });
+
+    test("a new code replaces the old one", async () => {
+        await staffMember();
+        await forgot();
+        const first = lastOtp();
+        await forgot();
+        const second = lastOtp();
+        if (first !== second) expect((await verify(first)).status).toBe(400);
+        expect((await verify(second)).status).toBe(200);
+    });
+
+    test("five codes per account per day; the sixth is refused, and other accounts aren't affected", async () => {
+        await staffMember();
+        await staffMember("kemi@greenhill.ng");
+        for (let i = 0; i < 5; i++) expect((await forgot()).status).toBe(200);
+        const sixth = await forgot();
+        expect(sixth.status).toBe(429);
+        expect((await forgot("kemi@greenhill.ng")).status).toBe(200);
+    });
+
+    test("parallel requests can't get past the daily limit", async () => {
+        const doc = await staffMember();
+        const results = await Promise.all(Array.from({ length: 12 }, () => forgot()));
+        expect(results.filter((r) => r.status === 200)).toHaveLength(5);
+        expect((await otpState(doc._id)).resetOtpRequests).toHaveLength(5);
+    });
+
+    test("the limit is a rolling 24 hours", async () => {
+        const doc = await staffMember();
+        const yesterday = new Date(Date.now() - 25 * 60 * 60 * 1000);
+        await M.staffModel.collection.updateOne({ _id: doc._id }, { $set: { resetOtpRequests: Array(5).fill(yesterday) } });
+        expect((await forgot()).status).toBe(200);
+        expect((await otpState(doc._id)).resetOtpRequests).toHaveLength(1);
+    });
+});
