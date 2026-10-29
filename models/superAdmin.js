@@ -108,8 +108,10 @@ const superAdminSchema = new mongoose.Schema(
       type: String,
       default: null,
     },
+    // A Date, so the reset flow can compare it with now (it was a String,
+    // which can't be compared as a time; no stored value was ever kept)
     resetPasswordExpire: {
-      type: String,
+      type: Date,
       default: null,
     },
   },

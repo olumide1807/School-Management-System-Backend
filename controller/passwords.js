@@ -18,8 +18,13 @@ const { successResponse } = require("../utils/successResponse")
 const SuperAdmin = require("../models/superAdmin");
 const { staffModel } = require("../models");
 
+const crypto = require("crypto");
 const NodeCache = require('node-cache');
 const cache = new NodeCache();
+
+// Reset tokens are stored hashed: the database never holds one that works
+const sha256 = (value) => crypto.createHash("sha256").update(String(value)).digest("hex");
+const RESET_TOKEN_MINUTES = 15;
 
 // ============================ FORGOT PASSWORD ========================================
 exports.forgotPassword = asyncHandler(async (req, res, next) => {
@@ -102,17 +107,26 @@ exports.verifyOTP = asyncHandler(async (req, res, next) => {
       return next(new ErrorResponse('OTP not generated or expired, please regenerate OTP', 404));
     }
 
-    // Check if the provided OTP matches the stored OTP
+    // Check if the provided OTP matches the stored OTP. The OTP has already
+    // been taken from the cache, so it can't be tried again either way.
     if (otp != req.body.otp) {
       return next(new ErrorResponse('Incorrect OTP!', 400));
     }
 
-    // Update user with reset token and expiration time
-    user.resetPasswordToken = otp;
-    user.resetPasswordExpire = Date.now() + 10 * 60 * 1000;
-    await user.save();
+    // The OTP is spent. In its place, a single-use reset token: random,
+    // returned only to whoever verified, stored only as a hash, and short-
+    // lived. resetPassword accepts that token and nothing else, so knowing
+    // the email isn't enough to walk into someone else's reset.
+    const resetToken = crypto.randomBytes(32).toString("hex");
+    await user.constructor.updateOne(
+      { _id: user._id },
+      { $set: { resetPasswordToken: sha256(resetToken), resetPasswordExpire: new Date(Date.now() + RESET_TOKEN_MINUTES * 60 * 1000) } }
+    );
 
-    successResponse(res, 200, "Please proceed to resetting your password.")
+    successResponse(res, 200, "Please proceed to resetting your password.", {
+      resetToken,
+      expiresInMinutes: RESET_TOKEN_MINUTES,
+    });
   } catch (err) {
     console.error(err);
     return next(new ErrorResponse('Error verifying OTP', 500));
@@ -130,22 +144,22 @@ exports.resetPassword = asyncHandler(async (req, res, next) => {
       return next(new ErrorResponse(error.details[0].message, 400));
     }
 
-    // Validate query parameters
-    if (!req.query || !req.query.email) {
-      return next(new ErrorResponse('No email detected! It should be sent as a query param', 404));
-    }
-
-    // Find user by email
-    let user = await SuperAdmin.findOne({ emailAddress: req.query.email, resetPasswordExpire: { $gt: Date.now() } });
-    if (!user) user = await staffModel.findOne({ emailAddress: req.query.email, resetPasswordExpire: { $gt: Date.now() } });
-    if (!user) {
-      return next(new ErrorResponse('Reset token expired! Please try again later', 400));
-    }
+    // The token from verifyOTP is the only thing that identifies the
+    // account. Setting the password and clearing the token is one atomic
+    // update, so a token works exactly once — two requests racing with it
+    // can't both succeed — and an expired one never matches.
     const hashedPassword = await GeneratePassword(req.body.password);
-    user.password = hashedPassword;
-    user.resetPasswordToken = null;
-    user.resetPasswordExpire = null;
-    await user.save();
+    const consume = {
+      $set: { password: hashedPassword, resetPasswordToken: null, resetPasswordExpire: null },
+    };
+    const match = { resetPasswordToken: sha256(req.body.token), resetPasswordExpire: { $gt: new Date() } };
+    const user =
+      (await SuperAdmin.findOneAndUpdate(match, consume)) ||
+      (await staffModel.findOneAndUpdate(match, consume));
+    if (!user) {
+      // Wrong, already used or expired: the same answer for each
+      return next(new ErrorResponse('This reset link has expired or has already been used. Request a new code to start again.', 400));
+    }
     successResponse(res, 200, "Password reset successful. Please login with your new password.");
   } catch (err) {
     console.error(err);

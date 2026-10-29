@@ -78,7 +78,7 @@ describe("the forgot-password flow accepts the OTP it generates", () => {
         // The user types it; it arrives as a number (Joi.number())
         const verify = await run(passwords.verifyOTP, { body: { otp: Number(otp) }, query: { email: "owner@greenhill.ng" } });
         expect(verify.status).toBe(200);
-        const reset = await run(passwords.resetPassword, { body: { password: "a-new-password" }, query: { email: "owner@greenhill.ng" } });
+        const reset = await run(passwords.resetPassword, { body: { token: verify.body.data.resetToken, password: "a-new-password" } });
         expect(reset.status).toBe(200);
     });
 });
