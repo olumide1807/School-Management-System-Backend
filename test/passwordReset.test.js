@@ -29,6 +29,9 @@ beforeEach(() => {
 afterEach(() => jest.restoreAllMocks());
 
 const EMAIL = "tunde@greenhill.ng";
+const NOT_VALID = "That code isn't valid. Check the email and try again, or request a new code.";
+// A code that isn't this one
+const wrong = (otp) => String(Number(otp) === 999999 ? 100000 : Number(otp) + 1);
 async function staffMember(email = EMAIL) {
     return M.staffModel.create({
         schoolId: f.id(), firstName: "Tunde", surname: "Bello", emailAddress: email, staffType: "academic",
@@ -141,7 +144,6 @@ describe("resetting needs the token, and nothing else will do", () => {
 });
 
 describe("OTPs resist guessing", () => {
-    const wrong = (otp) => String(Number(otp) === 999999 ? 100000 : Number(otp) + 1);
     const otpState = (id) => M.staffModel.collection.findOne({ _id: id });
 
     test("a code is six digits and stored only as a hash", async () => {
@@ -154,31 +156,28 @@ describe("OTPs resist guessing", () => {
         expect(raw.resetOtpHash).not.toContain(otp);
     });
 
-    test("wrong guesses count down, and the fifth kills the code — even the right one fails after", async () => {
+    test("four wrong guesses leave the code working; the fifth kills it — even the right one fails after", async () => {
         await staffMember();
         await forgot();
         const otp = lastOtp();
-        const answers = [];
-        for (let i = 0; i < 5; i++) answers.push((await verify(wrong(otp))).body.error);
-        expect(answers).toEqual([
-            "That code isn't right. 4 attempts left.",
-            "That code isn't right. 3 attempts left.",
-            "That code isn't right. 2 attempts left.",
-            "That code isn't right. 1 attempt left.",
-            "Too many wrong codes. Request a new code.",
-        ]);
-        const late = await verify(otp);
-        expect(late.status).toBe(400);
-        expect(late.body.error).toMatch(/^There's no valid code for this account/);
+        for (let i = 0; i < 4; i++) await verify(wrong(otp));
+        expect((await verify(otp)).status).toBe(200);
+
+        await forgot();
+        const next = lastOtp();
+        for (let i = 0; i < 5; i++) await verify(wrong(next));
+        expect((await verify(next))).toEqual({ status: 400, body: { success: false, error: NOT_VALID } });
     });
 
     test("parallel guesses can't get more than five tries between them", async () => {
         const doc = await staffMember();
         await forgot();
         const otp = lastOtp();
-        const results = await Promise.all(Array.from({ length: 20 }, () => verify(wrong(otp))));
-        const counted = results.filter((r) => /That code isn't right|Too many wrong codes/.test(r.body.error));
-        expect(counted.length).toBe(5);
+        // Each guess compared against the code is hashed first; count them
+        const hashes = jest.spyOn(crypto, "createHash");
+        await Promise.all(Array.from({ length: 20 }, () => verify(wrong(otp))));
+        expect(hashes).toHaveBeenCalledTimes(5);
+        hashes.mockRestore();
         expect((await verify(otp)).status).toBe(400);
         expect((await otpState(doc._id)).resetOtpHash).toBeUndefined();
     });
@@ -245,12 +244,33 @@ describe("forgot-password doesn't reveal which emails have accounts", () => {
         expect(otpsLogged("nobody@example.com")).toBe(0);
     });
 
-    test("verifying for an unknown email gets the same answer as a real account with no code", async () => {
-        await staffMember();
-        const unknown = await verify("123456", "nobody@example.com");
-        const noCode = await verify("123456");
-        expect(unknown.status).toBe(400);
-        expect(unknown).toEqual(noCode);
+    // One wrong guess used to answer "N attempts left" only for a real
+    // account with a live code — so one request and one guess revealed
+    // whether an account existed. Every failure now reads the same.
+    test("every failed verify reads the same: unknown email, no code, wrong code, expired, spent, killed", async () => {
+        const doc = await staffMember();
+        const answers = {};
+        answers.unknownEmail = await verify("123456", "nobody@example.com");
+        answers.noCode = await verify("123456");
+
+        await forgot();
+        answers.firstWrongGuess = await verify(wrong(lastOtp()));
+        for (let i = 0; i < 3; i++) await verify(wrong(lastOtp()));
+        answers.lastWrongGuess = await verify(wrong(lastOtp()));
+        answers.afterKilled = await verify(lastOtp());
+
+        await forgot();
+        await M.staffModel.collection.updateOne({ _id: doc._id }, { $set: { resetOtpExpire: new Date(Date.now() - 1000) } });
+        answers.expired = await verify(lastOtp());
+
+        await forgot();
+        const spent = lastOtp();
+        await verify(spent);
+        answers.spent = await verify(spent);
+
+        for (const [why, r] of Object.entries(answers)) {
+            expect({ why, ...r }).toEqual({ why, status: 400, body: { success: false, error: NOT_VALID } });
+        }
     });
 
     test("a request is answered exactly once", async () => {

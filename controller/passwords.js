@@ -130,13 +130,16 @@ exports.verifyOTP = asyncHandler(async (req, res, next) => {
       return next(new ErrorResponse('No email detected! It should be sent as a query param', 404));
     }
 
-    const noCode = () => new ErrorResponse(
-      "There's no valid code for this account: it has expired, been used, or had too many wrong attempts. Request a new code.", 400
+    // Every failure gets this one answer: a wrong code, an expired or spent
+    // one, a code killed by wrong guesses, an email with no account. Telling
+    // them apart — or counting attempts down, which only happens for a live
+    // code on a real account — would say which emails have accounts.
+    const notValid = () => new ErrorResponse(
+      "That code isn't valid. Check the email and try again, or request a new code.", 400
     );
     let user = await SuperAdmin.findOne({ emailAddress: req.query.email });
     if (!user) user = await staffModel.findOne({ emailAddress: req.query.email });
-    // An unknown email gets the same answer as an account with no live code
-    if (!user) return next(noCode());
+    if (!user) return next(notValid());
     const Model = user.constructor;
 
     // Spend one attempt before comparing. The increment only happens while
@@ -152,19 +155,18 @@ exports.verifyOTP = asyncHandler(async (req, res, next) => {
       { $inc: { resetOtpAttempts: 1 } },
       { new: true }
     ).select("+resetOtpHash +resetOtpAttempts");
-    if (!attempt) return next(noCode());
+    if (!attempt) return next(notValid());
 
     if (otpHash(user._id, req.body.otp) !== attempt.resetOtpHash) {
-      const left = MAX_OTP_ATTEMPTS - attempt.resetOtpAttempts;
-      if (left <= 0) {
-        // Out of attempts: the code is gone, and a new one must be requested
+      if (attempt.resetOtpAttempts >= MAX_OTP_ATTEMPTS) {
+        // Out of attempts: the code is gone, and a new one must be
+        // requested. Not announced — the answer is the same as any other.
         await Model.updateOne(
           { _id: user._id, resetOtpHash: attempt.resetOtpHash },
           { $unset: { resetOtpHash: "", resetOtpExpire: "", resetOtpAttempts: "" } }
         );
-        return next(new ErrorResponse("Too many wrong codes. Request a new code.", 400));
       }
-      return next(new ErrorResponse(`That code isn't right. ${left} attempt${left === 1 ? "" : "s"} left.`, 400));
+      return next(notValid());
     }
 
     // Right code. Spend it and issue a single-use reset token in the same
@@ -184,7 +186,7 @@ exports.verifyOTP = asyncHandler(async (req, res, next) => {
         },
       }
     );
-    if (!spent) return next(noCode());
+    if (!spent) return next(notValid());
 
     successResponse(res, 200, "Please proceed to resetting your password.", {
       resetToken,

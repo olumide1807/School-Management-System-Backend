@@ -68,7 +68,9 @@ A teacher-facing route that 403s is usually missing `"academic"` in its
   10 minutes, replaces any earlier one) and always answers the same 200,
   whether or not the email has an account — never reveal which do.
 - **verifyOTP** spends the code and returns a single-use `resetToken`
-  (stored as a SHA-256 hash, 15 minutes).
+  (stored as a SHA-256 hash, 15 minutes). Every failure — wrong, expired,
+  spent or killed code, unknown email — gets the same answer, with no
+  attempts count: a countdown only happens for a real account's live code.
 - **resetpassword** takes `{ token, password }` and nothing else. Setting
   the password and clearing the token is one atomic update.
 - Limits are **per account**: 5 wrong guesses kill a code; 5 codes per

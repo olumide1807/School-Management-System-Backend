@@ -15,9 +15,13 @@ const run = (handler, req) =>
         };
         const next = (err) => {
             if (!err) return reject(new Error("handler called next() without an error"));
-            // errorHandler logs every error; keep test output readable
-            const log = jest.spyOn(console, "log").mockImplementation(() => {});
-            try { errorHandler(err, req, res, () => {}); } finally { log.mockRestore(); }
+            // errorHandler logs every error; keep test output readable. Swap
+            // console.log out and put back exactly what was there — a spy a
+            // test installed included (jest.spyOn would return that same spy,
+            // and mockRestore would then remove it for the rest of the test).
+            const log = console.log;
+            console.log = () => {};
+            try { errorHandler(err, req, res, () => {}); } finally { console.log = log; }
         };
         Promise.resolve(handler(req, res, next)).catch(reject);
     });
