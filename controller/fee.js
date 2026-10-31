@@ -7,7 +7,11 @@ const {
   termModel,
   classArmModel,
   feeModel,
+  studentModel,
+  classLevelModel,
 } = require("../models");
+const { buildFeeStatement, buildFeeRoster } = require("../utils/buildFeeStatement");
+const { resolveReferenceTerm, describeTerm } = require("../utils/referenceTerm");
 const { isValidMongoId } = require("../utils/isValidMongoObjectId");
 const classArm = require("../models/classArm");
 
@@ -186,6 +190,75 @@ exports.deleteFee = asyncHandler(async (req, res, next) => {
   } catch (e) {
     // Log error to the console and send to the next middleware
     console.error("Error deleting fee", e);
+    next(e);
+  }
+});
+
+// ============================================================
+// FEE FIGURES FOR THE SCHOOL
+//
+// Read-only. Every figure comes from utils/buildFeeStatement.js — the
+// same arithmetic families see — so nothing here or in the admin screens
+// adds money up.
+// ============================================================
+
+// GET /fee/statement/:studentId
+// One student's statement: the same shape a parent gets for their child.
+exports.getStudentFeeStatement = asyncHandler(async (req, res, next) => {
+  try {
+    const schoolId = req.user.schoolName ? req.user.id : req.user.schoolId;
+    const { studentId } = req.params;
+    if (!isValidMongoId(studentId)) {
+      return next(new ErrorResponse("Invalid student Id provided!", 400));
+    }
+    const student = await studentModel.findOne({ _id: studentId, schoolId }).select("classArmId");
+    if (!student) return next(new ErrorResponse("Student not found!", 404));
+
+    successResponse(res, 200, null, await buildFeeStatement(schoolId, student._id, student.classArmId));
+  } catch (e) {
+    console.error("Error getting fee statement", e);
+    next(e);
+  }
+});
+
+// GET /fee/roster?termId=&classLevelId=
+// One term's figures for every student (or one class level). Without a
+// termId the server picks the term (utils/referenceTerm.js); the answer
+// always names the term it used, so no screen shows unlabelled figures.
+exports.getFeeRoster = asyncHandler(async (req, res, next) => {
+  try {
+    const schoolId = req.user.schoolName ? req.user.id : req.user.schoolId;
+    const { termId, classLevelId } = req.query;
+
+    if (classLevelId !== undefined) {
+      if (!isValidMongoId(classLevelId)) return next(new ErrorResponse("Invalid class level Id provided!", 400));
+      if (!(await classLevelModel.findOne({ _id: classLevelId, schoolId }))) {
+        return next(new ErrorResponse("Class level not found!", 404));
+      }
+    }
+
+    let picked;
+    if (termId !== undefined) {
+      if (!isValidMongoId(termId)) return next(new ErrorResponse("Invalid termId provided!", 400));
+      const term = await termModel.findOne({ _id: termId, schoolId });
+      if (!term) return next(new ErrorResponse("Term not found!", 404));
+      picked = { term, chosenBy: "requested" };
+    } else {
+      picked = await resolveReferenceTerm(schoolId);
+    }
+
+    // No terms at all: an empty state, not an error
+    if (!picked) {
+      return successResponse(res, 200, null, { term: null, rows: [], counts: null, classes: [] });
+    }
+
+    const [term, roster] = await Promise.all([
+      describeTerm(schoolId, picked.term, picked.chosenBy),
+      buildFeeRoster(schoolId, picked.term._id, { classLevelId }),
+    ]);
+    successResponse(res, 200, null, { term, ...roster });
+  } catch (e) {
+    console.error("Error getting fee roster", e);
     next(e);
   }
 });

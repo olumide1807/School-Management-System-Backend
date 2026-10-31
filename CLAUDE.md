@@ -174,6 +174,34 @@ there is no `isPublished` boolean. Unique on
 Any new family-facing endpoint that returns scores must check publication
 first. Staff endpoints must not.
 
+### Fees — one arithmetic, two shapes
+`utils/buildFeeStatement.js` is the **only** place fees and payments become
+payable / paid / outstanding / status (`summariseFee`, in kobo). Two
+builders call it, and nothing else adds money up — not a controller, not a
+screen:
+- `buildFeeStatement` — one student, every term with a line. The parent
+  portal (`GET /portal/child/:childId/fees`) and the admin profile
+  (`GET /fee/statement/:studentId`) both return it.
+- `buildFeeRoster` — one term, many students (`GET /fee/roster`, optional
+  `termId` and `classLevelId`): the admin lists, the dashboard tile and Fee
+  Management's per-class breakdown. Rows, plus counts by status.
+
+`test/feeRoster.test.js` checks every roster row against the statement for
+the same student, field by field. Keep it that way.
+
+- **Which term:** without a `termId`, `utils/referenceTerm.js` picks it —
+  active, else the term containing today, else the next, else the last —
+  and the answer names the term and `chosenBy`. Screens must show it.
+- **Who a class lists:** its members now, plus anyone who paid against its
+  fee and has since moved (`inClass: false`, `nowIn`). Counts use members
+  now only, so each student is counted once.
+- **There is no class history.** Promotion overwrites `classArmId`, so for a
+  term that has ended, a current member with no payment gets `no_record` —
+  no balance — rather than a debt for a class they may not have been in.
+- Statuses: `unpaid`, `part_paid`, `paid`, `nothing_due` (a ₦0 fee: neither
+  paid nor unpaid), `unknown` (an amount it can't read), and in the roster
+  `no_fee` and `no_record`.
+
 ---
 
 ## 5. Attendance
@@ -310,6 +338,8 @@ What's covered, and why it matters:
   terms, and a parent gets their own child's report, not the class's.
 - `buildFeeStatement.test.js` — kobo arithmetic, every status,
   `complete:false` for amounts it can't read, school scoping.
+- `feeRoster.test.js` — the roster agrees with the statement for every
+  student and status; who a past term lists; which term is picked.
 - `payments.test.js` — amount and method validation on `createPayment`;
   the duplicate-reference 409 and `confirmDuplicate`.
 - `reopenedDays.test.js` — "a closed day that has started can't be

@@ -5,8 +5,10 @@ const {
     sessionModel,
     classArmModel,
     classLevelModel,
+    studentModel,
 } = require("../models");
 const { parseFeeAmount } = require("./feeAmount");
+const { toDayStart } = require("./schoolDay");
 
 // ============================================================
 // FEE STATEMENT FOR ONE STUDENT
@@ -71,6 +73,14 @@ const publicPayment = (p) => ({
 
 const byDate = (a, b) => new Date(a.paymentDate || a.createdAt) - new Date(b.paymentDate || b.createdAt);
 
+// "JSS1 B" for a class arm, from arms and levels already loaded
+const classLabeller = (arms, levels) => (armId) => {
+    const arm = arms.find((a) => String(a._id) === String(armId));
+    if (!arm) return null;
+    const level = levels.find((l) => String(l._id) === String(arm.classLevelId));
+    return `${level?.levelShortName || ""} ${(arm.armName || "").toUpperCase()}`.trim() || null;
+};
+
 /**
  * Fee statement for one student, scoped to one school.
  *
@@ -119,12 +129,7 @@ async function buildFeeStatement(schoolId, studentId, classArmId) {
         schoolId,
         _id: { $in: [...new Set(arms.map((a) => String(a.classLevelId)))] },
     });
-    const classLabelOf = (armId) => {
-        const arm = arms.find((a) => String(a._id) === String(armId));
-        if (!arm) return null;
-        const level = levels.find((l) => String(l._id) === String(arm.classLevelId));
-        return `${level?.levelShortName || ""} ${(arm.armName || "").toUpperCase()}`.trim() || null;
-    };
+    const classLabelOf = classLabeller(arms, levels);
     const sessions = await sessionModel.find({
         schoolId,
         _id: { $in: [...new Set(terms.map((t) => String(t.sessionId)))] },
@@ -185,4 +190,116 @@ async function buildFeeStatement(schoolId, studentId, classArmId) {
     };
 }
 
-module.exports = { buildFeeStatement, summariseFee, parseFeeAmount };
+// ============================================================
+// FEE ROSTER: EVERY STUDENT IN ONE TERM
+//
+// The school's lists, dashboard and class breakdowns need one term's
+// figures for many students at once. Calling buildFeeStatement per student
+// would be one round of queries per child, so this loads the term in a few
+// queries — but every figure still comes from summariseFee, the same as a
+// statement. test/feeRoster.test.js checks each row against
+// buildFeeStatement for the same student.
+//
+// Who is listed for a class: everyone in it now, plus anyone who paid
+// against its fee for this term and has since moved. Nothing records which
+// class a student was in for a past term (promotion overwrites classArmId),
+// so a payment is the only evidence. Movers are listed with inClass:false
+// and nowIn naming their current class.
+//
+// A past term (ended, not active) has a catch: someone in the class now
+// with no payment against its fee may not have been in the class then, so
+// a balance would be a debt nobody can show they owe — and their parent's
+// statement has no such line. They get status "no_record": listed, paid
+// 0, no payable or outstanding. Anyone with a payment is a real line.
+//
+// Rows:   one per student per class they're listed under. A student in a
+//         class with no fee for the term gets status "no_fee".
+// Counts: per class and in total, by status, over students in the class
+//         now (inClass) — so each student is counted once.
+// ============================================================
+
+const STATUSES = ["unpaid", "part_paid", "paid", "nothing_due", "unknown", "no_fee", "no_record"];
+const emptyCounts = () => Object.fromEntries([["students", 0], ...STATUSES.map((s) => [s, 0])]);
+
+async function buildFeeRoster(schoolId, termId, { classLevelId, now = new Date() } = {}) {
+    const term = await termModel.findOne({ schoolId, _id: termId });
+    const past = !!term && !term.currentTerm && !!term.termEndDate && toDayStart(term.termEndDate) < toDayStart(now);
+
+    const arms = await classArmModel.find(classLevelId ? { schoolId, classLevelId } : { schoolId });
+    const armIds = arms.map((a) => a._id);
+    const fees = await feeModel.find({ schoolId, termId, classArmId: { $in: armIds } });
+    const payments = await paymentModel.find({ schoolId, feeId: { $in: fees.map((fee) => fee._id) } });
+
+    const payerIds = [...new Set(payments.map((p) => String(p.studentId)))];
+    const students = await studentModel
+        .find({ schoolId, $or: [{ classArmId: { $in: armIds } }, { _id: { $in: payerIds } }] })
+        .select("firstName surName otherName studentID classArmId status");
+
+    // Movers can be in a class outside this level; label them too
+    const otherArmIds = [...new Set(students.map((s) => String(s.classArmId)))]
+        .filter((id) => !arms.some((a) => String(a._id) === id));
+    const allArms = otherArmIds.length
+        ? [...arms, ...(await classArmModel.find({ schoolId, _id: { $in: otherArmIds } }))]
+        : arms;
+    const levels = await classLevelModel.find({
+        schoolId,
+        _id: { $in: [...new Set(allArms.map((a) => String(a.classLevelId)))] },
+    });
+    const classLabelOf = classLabeller(allArms, levels);
+
+    const feeForArm = (armId) => fees.find((fee) => String(fee.classArmId) === String(armId)) || null;
+    const row = (student, armId, fee) => {
+        const inClass = String(student.classArmId) === String(armId);
+        const base = {
+            studentId: String(student._id),
+            studentID: student.studentID || "",
+            name: [student.firstName, student.otherName, student.surName].filter(Boolean).join(" "),
+            studentStatus: student.status,
+            classArmId: String(armId),
+            classLabel: classLabelOf(armId),
+            inClass,
+            nowIn: inClass ? null : classLabelOf(student.classArmId),
+        };
+        if (!fee) {
+            return { ...base, feeId: null, currency: null, complete: true, payable: null, paid: null, outstanding: null, overpaid: null, status: "no_fee" };
+        }
+        const own = payments.filter((p) => String(p.feeId) === String(fee._id) && String(p.studentId) === String(student._id));
+        if (past && own.length === 0) {
+            return { ...base, feeId: String(fee._id), currency: fee.currency, complete: true, payable: null, paid: 0, outstanding: null, overpaid: null, status: "no_record" };
+        }
+        const { items, ...figures } = summariseFee(fee, own);
+        return { ...base, feeId: String(fee._id), ...figures };
+    };
+
+    const rows = [];
+    for (const student of students) {
+        const here = arms.find((a) => String(a._id) === String(student.classArmId));
+        if (here) rows.push(row(student, here._id, feeForArm(here._id)));
+        // Fees in this term they paid against, for a class they've left
+        for (const fee of fees) {
+            if (String(fee.classArmId) === String(student.classArmId)) continue;
+            if (payments.some((p) => String(p.feeId) === String(fee._id) && String(p.studentId) === String(student._id))) {
+                rows.push(row(student, fee.classArmId, fee));
+            }
+        }
+    }
+    rows.sort((a, b) =>
+        (a.classLabel || "").localeCompare(b.classLabel || "") ||
+        Number(b.inClass) - Number(a.inClass) ||
+        a.name.localeCompare(b.name));
+
+    const total = emptyCounts();
+    const classes = arms.map((arm) => ({ classArmId: String(arm._id), classLabel: classLabelOf(arm._id), hasFee: !!feeForArm(arm._id), counts: emptyCounts() }));
+    for (const r of rows.filter((x) => x.inClass)) {
+        const cls = classes.find((c) => c.classArmId === r.classArmId);
+        for (const counts of [total, cls.counts]) {
+            counts.students += 1;
+            counts[r.status] += 1;
+        }
+    }
+    classes.sort((a, b) => (a.classLabel || "").localeCompare(b.classLabel || ""));
+
+    return { rows, counts: total, classes };
+}
+
+module.exports = { buildFeeStatement, buildFeeRoster, summariseFee, parseFeeAmount, STATUSES };
