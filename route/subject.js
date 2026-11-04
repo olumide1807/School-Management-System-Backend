@@ -55,13 +55,10 @@ router.get(
   getSubjectById
 );
 
-//UPDATE
-
 // update a subject or specific subject
 router.put("/specific/:id", multipleProtect(["super admin", "admin"]), editSpecificSubject);
 router.put("/:id", multipleProtect(["super admin", "admin"]), editSubject);
 
-// DELETE
 
 // delete a subject or specific subject
 router.delete("/:id", multipleProtect(["super admin", "admin"]), deleteSubject);
