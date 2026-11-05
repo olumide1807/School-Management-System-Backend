@@ -184,6 +184,46 @@ describe("counts", () => {
     });
 });
 
+describe("deactivated students", () => {
+    async function withLeaver() {
+        const w = await school();
+        await M.studentModel.updateOne({ _id: w.kids.Dayo._id }, { status: "deactivated" }); // unpaid
+        await M.studentModel.updateOne({ _id: w.kids.Bola._id }, { status: "deactivated" }); // paid
+        return w;
+    }
+
+    test("aren't counted, whatever they owe or have paid, in total or per class", async () => {
+        const w = await withLeaver();
+        const { body } = await roster(w, { termId: String(w.now._id) });
+        expect(body.data.counts).toEqual({ students: 5, unpaid: 0, part_paid: 1, paid: 1, nothing_due: 1, unknown: 1, no_fee: 1, no_record: 0 });
+        expect(body.data.classes.find((c) => c.classLabel === "JSS1 A").counts).toMatchObject({ students: 2, unpaid: 0, part_paid: 1, paid: 1 });
+    });
+
+    test("stay in the rows, labelled, with the same figures as their statement", async () => {
+        const w = await withLeaver();
+        const { body } = await roster(w, { termId: String(w.now._id) });
+        const bola = body.data.rows.find((r) => r.studentId === String(w.kids.Bola._id));
+        expect(bola).toMatchObject({ studentStatus: "deactivated", inClass: true, status: "paid" });
+        const st = await buildFeeStatement(w.s, w.kids.Bola._id, w.jss1a._id);
+        expect(figures(bola)).toEqual(figures(st.current));
+        expect(body.data.rows.filter((r) => r.studentStatus === "deactivated")).toHaveLength(2);
+    });
+
+    test("a level's roster leaves them out of its counts too", async () => {
+        const w = await withLeaver();
+        const { body } = await roster(w, { termId: String(w.now._id), classLevelId: String(w.jss1a.classLevelId) });
+        expect(body.data.counts.students).toBe(3);
+        expect(body.data.rows.filter((r) => r.classLabel === "JSS1 A" && r.inClass)).toHaveLength(4);
+    });
+
+    test("a student with no status on record (an old document) still counts", async () => {
+        const w = await school();
+        await M.studentModel.collection.updateOne({ _id: w.kids.Dayo._id }, { $unset: { status: "" } });
+        const { body } = await roster(w, { termId: String(w.now._id) });
+        expect(body.data.counts.students).toBe(7);
+    });
+});
+
 describe("which term", () => {
     test("asked for none: the active term, and the answer names it", async () => {
         const w = await school();

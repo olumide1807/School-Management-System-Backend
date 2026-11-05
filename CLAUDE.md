@@ -201,7 +201,8 @@ history to say they owe it.
   and the answer names the term and `chosenBy`. Screens must show it.
 - **Who a class lists:** its members now, plus anyone who paid against its
   fee and has since moved (`inClass: false`, `nowIn`). Counts use members
-  now only, so each student is counted once.
+  now only, so each student is counted once, and leave out deactivated
+  students, who stay in the rows (`studentStatus`).
 - **There is no class history.** Promotion overwrites `classArmId`, so for a
   term that has ended, a current member with no payment gets `no_record` —
   no balance — rather than a debt for a class they may not have been in.

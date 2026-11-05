@@ -215,7 +215,11 @@ async function buildFeeStatement(schoolId, studentId, classArmId) {
 // Rows:   one per student per class they're listed under. A student in a
 //         class with no fee for the term gets status "no_fee".
 // Counts: per class and in total, by status, over students in the class
-//         now (inClass) — so each student is counted once.
+//         now (inClass) — so each student is counted once — leaving out
+//         deactivated students: someone who has left doesn't make this
+//         term look more outstanding. They stay in the rows (studentStatus);
+//         the incomplete-scores check in controller/result.js leaves them
+//         out the same way.
 // ============================================================
 
 const STATUSES = ["unpaid", "part_paid", "paid", "nothing_due", "unknown", "no_fee", "no_record"];
@@ -290,7 +294,7 @@ async function buildFeeRoster(schoolId, termId, { classLevelId, now = new Date()
 
     const total = emptyCounts();
     const classes = arms.map((arm) => ({ classArmId: String(arm._id), classLabel: classLabelOf(arm._id), hasFee: !!feeForArm(arm._id), counts: emptyCounts() }));
-    for (const r of rows.filter((x) => x.inClass)) {
+    for (const r of rows.filter((x) => x.inClass && x.studentStatus !== "deactivated")) {
         const cls = classes.find((c) => c.classArmId === r.classArmId);
         for (const counts of [total, cls.counts]) {
             counts.students += 1;
