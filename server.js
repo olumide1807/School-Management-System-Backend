@@ -124,8 +124,8 @@ app.use("*" || "*/*", NotFoundRouter);
 app.use(Sentry.Handlers.errorHandler());
 app.use(errorHandler);
 
-PORT = process.env.PORT;
-app.listen(5002, () => {
+const PORT = process.env.PORT || 5002;
+app.listen(PORT, () => {
   console.log(`server is on ${PORT} `);
   // Start the session/term auto-activation scheduler
   // Runs once on startup (after 5s delay) and then every hour

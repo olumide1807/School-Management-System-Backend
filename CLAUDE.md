@@ -5,10 +5,8 @@ Nigerian schools. The React frontend lives in a **separate repo**
 (`School-Management-System-Frontend`, usually a sibling folder on disk).
 
 - Run: `npm run dev` (nodemon) · Test: `npm test` (see §9)
-- Port: **5002**, hardcoded in `app.listen(5002, ...)` in `server.js`.
-  `process.env.PORT` is read into a global and only used in the log line — it
-  does not actually change the port. Don't "fix" this without checking the
-  frontend's `.env` (`API_URL`) first.
+- Port: `process.env.PORT`, falling back to **5002** locally. Hosts assign
+  `PORT`; the frontend's `.env` (`VITE_API_URL`) must point at the result.
 - Env: loaded from `./config/config.env` (not `.env`), via
   `dotenv.config({ path: "./config/config.env" })`.
 
@@ -346,6 +344,8 @@ What's covered, and why it matters:
   terms, and a parent gets their own child's report, not the class's.
 - `buildFeeStatement.test.js` — kobo arithmetic, every status,
   `complete:false` for amounts it can't read, school scoping.
+- `serverStartup.test.js` — the real `server.js` binds `PORT` (else 5002) and
+  serves with `config/config.env` absent and the optional services unset.
 - `feeRoster.test.js` — the roster agrees with the statement for every
   student and status; who a past term lists; which term is picked.
 - `payments.test.js` — amount and method validation on `createPayment`;
