@@ -302,4 +302,52 @@ async function buildFeeRoster(schoolId, termId, { classLevelId, now = new Date()
     return { rows, counts: total, classes };
 }
 
-module.exports = { buildFeeStatement, buildFeeRoster, summariseFee, parseFeeAmount, STATUSES };
+// ============================================================
+// FEES A PAYMENT CAN BE RECORDED AGAINST
+//
+// A payment is a (student, fee) pair: a child promoted last term can still
+// pay last term's fee, which belongs to a class they've left. So this is
+// every fee in the school, each saying which class, term and session it's
+// for, since choosing the wrong one is the mistake to guard against.
+//
+// Each choice gives the fee's amount and what this student has paid against
+// it, not a balance or status: nothing records which class they were in for
+// another term, so most of these aren't debts anyone can show they owe.
+//
+// Newest term first; within a term, the student's current class first.
+// ============================================================
+async function buildFeeChoices(schoolId, student) {
+    const [fees, payments] = await Promise.all([
+        feeModel.find({ schoolId }),
+        paymentModel.find({ schoolId, studentId: student._id }),
+    ]);
+    const terms = await termModel.find({ schoolId, _id: { $in: [...new Set(fees.map((f) => String(f.termId)))] } });
+    const sessions = await sessionModel.find({ schoolId, _id: { $in: [...new Set(terms.map((t) => String(t.sessionId)))] } });
+    const arms = await classArmModel.find({ schoolId, _id: { $in: [...new Set(fees.map((f) => String(f.classArmId)))] } });
+    const levels = await classLevelModel.find({ schoolId, _id: { $in: [...new Set(arms.map((a) => String(a.classLevelId)))] } });
+    const classLabelOf = classLabeller(arms, levels);
+
+    return fees
+        .map((fee) => {
+            const t = terms.find((x) => String(x._id) === String(fee.termId));
+            const s = t && sessions.find((x) => String(x._id) === String(t.sessionId));
+            const own = payments.filter((p) => String(p.feeId) === String(fee._id));
+            const { currency, complete, payable, paid } = summariseFee(fee, own);
+            return {
+                feeId: String(fee._id),
+                term: { termId: String(fee.termId), termName: t?.termName || "Term", sessionName: s?.sessionName || "" },
+                classArmId: String(fee.classArmId),
+                classLabel: classLabelOf(fee.classArmId),
+                isCurrentClass: String(fee.classArmId) === String(student.classArmId),
+                currency, complete, payable, paid,
+                _sortDate: t?.termStartDate || fee.createdAt,
+            };
+        })
+        .sort((a, b) =>
+            new Date(b._sortDate) - new Date(a._sortDate) ||
+            Number(b.isCurrentClass) - Number(a.isCurrentClass) ||
+            (a.classLabel || "").localeCompare(b.classLabel || ""))
+        .map(({ _sortDate, ...choice }) => choice);
+}
+
+module.exports = { buildFeeStatement, buildFeeRoster, buildFeeChoices, summariseFee, parseFeeAmount, STATUSES };

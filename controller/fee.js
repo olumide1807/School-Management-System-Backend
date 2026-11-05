@@ -10,7 +10,7 @@ const {
   studentModel,
   classLevelModel,
 } = require("../models");
-const { buildFeeStatement, buildFeeRoster } = require("../utils/buildFeeStatement");
+const { buildFeeStatement, buildFeeRoster, buildFeeChoices } = require("../utils/buildFeeStatement");
 const { resolveReferenceTerm, describeTerm } = require("../utils/referenceTerm");
 const { isValidMongoId } = require("../utils/isValidMongoObjectId");
 const classArm = require("../models/classArm");
@@ -217,6 +217,26 @@ exports.getStudentFeeStatement = asyncHandler(async (req, res, next) => {
     successResponse(res, 200, null, await buildFeeStatement(schoolId, student._id, student.classArmId));
   } catch (e) {
     console.error("Error getting fee statement", e);
+    next(e);
+  }
+});
+
+// GET /fee/choices/:studentId
+// Every fee a payment for this student could go against, labelled with its
+// class, term and session. Any class: see buildFeeChoices.
+exports.getFeeChoices = asyncHandler(async (req, res, next) => {
+  try {
+    const schoolId = req.user.schoolName ? req.user.id : req.user.schoolId;
+    const { studentId } = req.params;
+    if (!isValidMongoId(studentId)) {
+      return next(new ErrorResponse("Invalid student Id provided!", 400));
+    }
+    const student = await studentModel.findOne({ _id: studentId, schoolId }).select("classArmId");
+    if (!student) return next(new ErrorResponse("Student not found!", 404));
+
+    successResponse(res, 200, null, await buildFeeChoices(schoolId, student));
+  } catch (e) {
+    console.error("Error getting fee choices", e);
     next(e);
   }
 });

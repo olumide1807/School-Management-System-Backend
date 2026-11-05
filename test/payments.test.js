@@ -34,6 +34,28 @@ const record = (w, body, school = w.school) =>
     });
 const count = () => M.paymentModel.countDocuments();
 
+describe("a student and a fee from the same school, nothing more", () => {
+    test("a fee for a class the student isn't in is accepted", async () => {
+        const w = await world();
+        const elsewhere = await f.classArm(w.school, "JSS3", "c");
+        const fee = await f.fee(w.school, w.term._id, elsewhere._id, [{ description: "Tuition", amount: 1000 }]);
+        expect((await record(w, { feeId: String(fee._id) })).status).toBe(201);
+        expect(await M.paymentModel.countDocuments({ studentId: w.child._id, feeId: fee._id })).toBe(1);
+    });
+
+    test("another school's student, or another school's fee, is refused and nothing is stored", async () => {
+        const w = await world();
+        const otherSchool = f.id();
+        const otherArm = await f.classArm(otherSchool);
+        const otherChild = await f.student(otherSchool, otherArm._id);
+        const otherTerm = await f.term(otherSchool, (await f.session(otherSchool))._id);
+        const otherFee = await f.fee(otherSchool, otherTerm._id, otherArm._id, [{ description: "Tuition", amount: 1000 }]);
+        expect(await record(w, { studentId: String(otherChild._id) })).toEqual({ status: 404, body: { success: false, error: "Student not found" } });
+        expect(await record(w, { feeId: String(otherFee._id) })).toEqual({ status: 404, body: { success: false, error: "Fee record not found" } });
+        expect(await count()).toBe(0);
+    });
+});
+
 describe("amount", () => {
     test.each([
         ["with a thousands comma", "50,000"],

@@ -8,10 +8,12 @@
 // school and the family are looking at different balances.
 const M = require("../models");
 const fee = require("../controller/fee");
+const payment = require("../controller/payment");
+const portal = require("../controller/portal");
 const { buildFeeStatement, buildFeeRoster } = require("../utils/buildFeeStatement");
 const { resolveReferenceTerm } = require("../utils/referenceTerm");
 const { useTestDatabase } = require("./helpers/db");
-const { run, asSchool } = require("./helpers/http");
+const { run, asSchool, asParent } = require("./helpers/http");
 const { recordQueries, unscopedQueries } = require("./helpers/queryLog");
 const f = require("./helpers/factories");
 
@@ -264,6 +266,113 @@ describe("scoped to the school", () => {
         const otherIds = new Set(Object.values(other.kids).map((k) => String(k._id)));
         expect(body.data.rows.some((r) => otherIds.has(r.studentId))).toBe(false);
         expect(body.data.rows.find((r) => r.studentId === String(w.kids.Dayo._id))).toMatchObject({ paid: 0, status: "unpaid" });
+    });
+});
+
+// A payment is a (student, fee) pair; the class is no part of it. Dayo is
+// promoted to JSS2 A, then pays last term's JSS1 A fee.
+describe("a late payment for a class the student has left", () => {
+    const guardianOf = async (school, kid) => {
+        const _id = f.id();
+        await M.studentModel.updateOne({ _id: kid._id, schoolId: school }, { $push: { guardians: { parentId: _id, relationship: "Mother" } } });
+        return { _id };
+    };
+    async function promoted() {
+        const w = await school();
+        await M.studentModel.updateOne({ _id: w.kids.Dayo._id }, { classArmId: w.jss2a._id });
+        const dayo = await M.studentModel.findById(w.kids.Dayo._id);
+        const r = await run(payment.createPayment, {
+            ...asSchool(w.s),
+            body: { studentId: String(dayo._id), feeId: String(w.lastFee._id), amount: 4000, paymentMethod: "cash", paymentDate: "2026-10-16" },
+        });
+        expect(r.status).toBe(201);
+        return { w, dayo };
+    }
+
+    test("is on the parent's statement, under the class and term it was for", async () => {
+        const { w, dayo } = await promoted();
+        const parent = await guardianOf(w.s, dayo);
+        const { status, body } = await run(portal.getChildFees, { ...asParent(parent._id, w.s), params: { childId: String(dayo._id) } });
+        expect(status).toBe(200);
+        expect(body.data.otherFees).toHaveLength(1);
+        expect(body.data.otherFees[0]).toMatchObject({
+            feeId: String(w.lastFee._id), classLabel: "JSS1 A", term: { termName: "Third Term", sessionName: "2026/2027" },
+            payable: 10000, paid: 4000, outstanding: 6000, status: "part_paid",
+        });
+        // This term's fee is for the class they're in now, and untouched by it
+        expect(body.data.current.classLabel).toBe("JSS2 A");
+        expect(body.data.current.paid).toBe(0);
+    });
+
+    test("is on the roster for that term, labelled with where they are now, matching the statement", async () => {
+        const { w, dayo } = await promoted();
+        const { body } = await roster(w, { termId: String(w.last._id) });
+        const row = body.data.rows.find((r) => r.studentId === String(dayo._id));
+        expect(row).toMatchObject({ classLabel: "JSS1 A", inClass: false, nowIn: "JSS2 A", paid: 4000, outstanding: 6000, status: "part_paid" });
+        const st = await statementOf(w, dayo);
+        expect(figures(row)).toEqual(figures(st.otherFees[0]));
+    });
+
+    test("leaves this term's roster row for the class they're in now alone", async () => {
+        const { w, dayo } = await promoted();
+        const { body } = await roster(w, { termId: String(w.now._id) });
+        const rows = body.data.rows.filter((r) => r.studentId === String(dayo._id));
+        expect(rows).toHaveLength(1);
+        expect(rows[0]).toMatchObject({ classLabel: "JSS2 A", inClass: true, status: "unknown", paid: 0 });
+    });
+});
+
+describe("GET /fee/choices/:studentId", () => {
+    const choicesFor = (w, kid) => run(fee.getFeeChoices, { ...asSchool(w.s), params: { studentId: String(kid._id) } });
+
+    test("every fee in the school, each naming its class, term and session", async () => {
+        const w = await school();
+        const { status, body } = await choicesFor(w, w.kids.Kemi);
+        expect(status).toBe(200);
+        expect(body.data.map((c) => [c.classLabel, c.term.termName, c.term.sessionName])).toEqual([
+            // Newest term first; within it, the student's own class first
+            ["JSS2 A", "First Term", "2026/2027"],
+            ["JSS1 A", "First Term", "2026/2027"],
+            ["JSS1 B", "First Term", "2026/2027"],
+            ["JSS1 A", "Third Term", "2026/2027"],
+        ]);
+        expect(body.data.map((c) => c.isCurrentClass)).toEqual([true, false, false, false]);
+    });
+
+    test("the amount and what this student has paid: the same figures as their statement", async () => {
+        const w = await school();
+        const { body } = await choicesFor(w, w.kids.Kemi);
+        const st = await statementOf(w, w.kids.Kemi);
+        const chosen = body.data.find((c) => c.feeId === String(w.lastFee._id));
+        expect(chosen).toMatchObject({ payable: 10000, paid: 10000, complete: true, currency: "NGN" });
+        expect([chosen.payable, chosen.paid]).toEqual([st.otherFees[0].payable, st.otherFees[0].paid]);
+        // Only this student's payments count
+        const ada = (await choicesFor(w, w.kids.Ada)).body.data.find((c) => c.feeId === String(w.fee1a._id));
+        expect(ada.paid).toBe(4.65);
+        // An amount it can't read: no total, said to be incomplete
+        expect(body.data.find((c) => c.classLabel === "JSS2 A")).toMatchObject({ complete: false, payable: null });
+    });
+
+    test("claims no balance: most of these aren't debts anyone can show this student owes", async () => {
+        const w = await school();
+        const { body } = await choicesFor(w, w.kids.Funmi);
+        for (const c of body.data) {
+            expect(c).not.toHaveProperty("outstanding");
+            expect(c).not.toHaveProperty("status");
+        }
+    });
+
+    test("scoped: another school's student isn't found, another school's fees aren't offered, every query is filtered", async () => {
+        const w = await school();
+        const other = await school();
+        expect((await choicesFor(w, other.kids.Ada)).status).toBe(404);
+        expect((await run(fee.getFeeChoices, { ...asSchool(w.s), params: { studentId: "nope" } })).status).toBe(400);
+        const { body } = await choicesFor(w, w.kids.Ada);
+        const otherFees = (await M.feeModel.find({ schoolId: other.s })).map((x) => String(x._id));
+        expect(body.data.some((c) => otherFees.includes(c.feeId))).toBe(false);
+        const models = [M.termModel, M.sessionModel, M.classArmModel, M.classLevelModel, M.feeModel, M.paymentModel, M.studentModel];
+        const calls = await recordQueries(models, () => choicesFor(w, w.kids.Ada));
+        expect(unscopedQueries(calls, w.s)).toEqual([]);
     });
 });
 

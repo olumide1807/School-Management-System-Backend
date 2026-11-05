@@ -189,6 +189,13 @@ screen:
 `test/feeRoster.test.js` checks every roster row against the statement for
 the same student, field by field. Keep it that way.
 
+**A payment is a (student, fee) pair.** `createPayment` requires both to be
+in the school and nothing about the class: a child promoted last term can
+still pay last term's fee. `GET /fee/choices/:studentId` (`buildFeeChoices`)
+lists every fee in the school with its class, term and session, and only its
+amount and what this student has paid — no balance, because there's no class
+history to say they owe it.
+
 - **Which term:** without a `termId`, `utils/referenceTerm.js` picks it —
   active, else the term containing today, else the next, else the last —
   and the answer names the term and `chosenBy`. Screens must show it.
