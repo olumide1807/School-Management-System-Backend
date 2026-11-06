@@ -225,6 +225,21 @@ exports.getProfile = asyncHandler(async (req, res, next) => {
 // @desc      Super admin updates its profile
 // @route
 // @access    Super Admin
+// What the update notification calls each field. It names what changed and
+// never says what to: these include bank details, and an inbox keeps them.
+const PROFILE_FIELD_NAMES = {
+  firstName: "first name",
+  lastName: "last name",
+  emailAddress: "email address",
+  phoneNumber: "phone number",
+  schoolName: "school name",
+  schoolMotto: "school motto",
+  schoolEmailAddress: "school email address",
+  schoolInitials: "school initials",
+  schoolAddress: "school address",
+  schoolAccountDetails: "bank account details",
+};
+
 exports.updateProfile = asyncHandler(async (req, res, next) => {
   try {
     // Validate the request body
@@ -256,9 +271,10 @@ exports.updateProfile = asyncHandler(async (req, res, next) => {
     };
 
     // Cache the previous data
+    const previous = JSON.stringify(prevData);
     myCache.set(
       superAdmin.emailAddress,
-      JSON.stringify(prevData),
+      previous,
       7 * 24 * 60 * 60
     ); // Set a TTL of 7 days
 
@@ -303,10 +319,15 @@ exports.updateProfile = asyncHandler(async (req, res, next) => {
 
     // Try to send notification email, but don't fail the update if it doesn't work
     let successMessage = "Information updated successfully!";
-    try {
-      const message = `An update has been made in your information.\nThe update details include ${JSON.stringify(
-        req.body
-      )}.\nIf this is not you, please click the below link to revert the changes 👇 and make sure to change your password.\n${
+    // Against what was saved, not what was asked for, so it can't report a
+    // change that didn't happen. Nothing changed: nothing to tell them.
+    const before = JSON.parse(previous);
+    const saved = superAdmin.toObject();
+    const changed = Object.keys(PROFILE_FIELD_NAMES)
+      .filter((field) => req.body[field] && JSON.stringify(before[field]) !== JSON.stringify(saved[field]))
+      .map((field) => PROFILE_FIELD_NAMES[field]);
+    if (changed.length) try {
+      const message = `An update has been made in your information.\nWhat changed: ${changed.join(", ")}.\nIf this is not you, please click the below link to revert the changes 👇 and make sure to change your password.\n${
         req.protocol
       }://${req.get("host")}/superadmin/revert?email=${superAdmin.emailAddress}`;
       const html = `<p>${message}</p>`;

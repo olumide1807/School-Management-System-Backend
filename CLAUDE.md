@@ -331,6 +331,8 @@ Don't be surprised by these; don't silently "fix" them either.
 - **Passwords are never emailed**, at creation or reset. The API returns them
   and the screen shows them once; an inbox would keep them forever.
   `emailFlows.test.js` holds every path to this.
+- **Never put a request body in an email.** Name what changed, as the super
+  admin update notice does, not what it changed to.
 
 - `asyncHandler` wraps every controller; errors go through
   `next(new ErrorResponse(msg, status))` to `middleware/error.js`.
