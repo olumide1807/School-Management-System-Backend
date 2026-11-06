@@ -7,7 +7,7 @@ const {
 const { asyncHandler } = require("../middleware");
 
 // utils
-const sendEmail = require("../utils/sendEmail");
+const sendNotificationFallback = require("../utils/sendNotificationFallback");
 const { GeneratePassword } = require("../utils/index");
 const { sendTokenResponse } = require("../utils/sendResponseToken");
 const { generateRandomOTP } = require('../utils/generateRandomOTP');
@@ -100,11 +100,11 @@ exports.forgotPassword = asyncHandler(async (req, res, next) => {
     successResponse(res, 200, CODE_SENT);
 
     const message = `Your password reset code is ${otp}. It lasts ${OTP_MINUTES} minutes. If you didn't ask for it, you can ignore this email.`;
-    sendEmail(user.emailAddress, "Password reset code", message, `<p>${message}</p>`)
+    sendNotificationFallback(user.emailAddress, "Password reset code", message, `<p>${message}</p>`, { urgent: true })
       .then((sent) => {
         // Not sent (email can be off, CLAUDE.md §7): in development the code
         // goes to the server console instead, never to the response
-        if (!sent?.status) logInDevelopment(`[DEV] OTP for ${user.emailAddress}: ${otp}`);
+        if (!sent) logInDevelopment(`[DEV] OTP for ${user.emailAddress}: ${otp}`);
       })
       .catch(() => logInDevelopment(`[DEV] OTP for ${user.emailAddress}: ${otp}`));
     return;

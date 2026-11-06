@@ -111,6 +111,8 @@ test("a reset code is emailed, to the account that asked", async () => {
     const [to, , text] = mailed()[0];
     expect(to).toBe("tunde@greenhill.ng");
     expect(text).toMatch(/\b\d{6}\b/);
+    // Retried, and not held back by a pause: it's the only way back in
+    expect(fallback.mock.calls[0][4]).toEqual({ urgent: true });
 });
 
 describe.each([["delivered", true], ["not delivered", false]])("whatever triggered it stands when the email is %s", (_name, works) => {

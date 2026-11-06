@@ -4,7 +4,8 @@ const sgMail = require("@sendgrid/mail");
 // The only code that talks to an email provider; everything else calls this.
 // It never throws, because a failed send must not fail what triggered it:
 // { status: true } when sent, { status: false, message } when not, plus
-// skipped: true when nothing was attempted, so there's no point retrying.
+// skipped: true when nothing was attempted, and for a provider's refusal
+// retryable: false, and recipientFault: true when it's about this address.
 //
 // The environment is read on each send, not at load, so it can't be read
 // before dotenv has run.
@@ -66,6 +67,14 @@ const whyNotSending = () => {
     return null;
 };
 
+// nodemailer: code EENVELOPE or EAUTH, responseCode the SMTP reply. SendGrid:
+// code is the HTTP status.
+const describeRefusal = (error) => {
+    const recipientFault = error.code === "EENVELOPE" || error.code === 400;
+    const refused = recipientFault || error.code === "EAUTH" || error.code === 401 || error.code === 403 || error.responseCode >= 500;
+    return { recipientFault, retryable: !refused };
+};
+
 const sendEmail = async (to, subject, text, html) => {
     const problem = whyNotSending();
     if (problem) {
@@ -83,7 +92,7 @@ const sendEmail = async (to, subject, text, html) => {
     } catch (error) {
         // The error only: the body can hold a reset code or a password
         console.error(`"${subject}" wasn't sent: ${error.message}`);
-        return { status: false, message: "Error sending message!. Please try again later" };
+        return { status: false, message: "Error sending message!. Please try again later", reason: error.message, ...describeRefusal(error) };
     }
 };
 

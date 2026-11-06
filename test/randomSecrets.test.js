@@ -7,7 +7,7 @@ process.env.JWT_EXPIRE = process.env.JWT_EXPIRE || "1h";
 
 // Email is off: sending fails and, outside production, the OTP
 // goes to the console. No network in tests.
-jest.mock("../utils/sendEmail", () => jest.fn(async () => ({ status: false, message: "not sent" })));
+jest.mock("../utils/sendNotificationFallback", () => jest.fn(async () => false));
 
 const { generateRandomOTP } = require("../utils/generateRandomOTP");
 const { ALPHABET, LENGTH } = require("../utils/generatePortalPassword");

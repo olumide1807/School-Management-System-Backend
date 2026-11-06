@@ -13,6 +13,7 @@ jest.mock("../utils/generatePortalPassword", () => ({
 }));
 jest.mock("../utils/generateRandomOTP", () => ({ generateRandomOTP: () => 654321 }));
 jest.mock("../utils/sendEmail", () => jest.fn());
+jest.mock("../utils/sendNotificationFallback", () => jest.fn());
 // Nothing fills this cache today (registration bypasses it), so
 // acceptApplication is unreachable, but its log line is still held here
 const mockInvitation = { value: undefined };
@@ -22,6 +23,7 @@ jest.mock("node-cache", () => function FakeCache() {
 
 const M = require("../models");
 const sendEmail = require("../utils/sendEmail");
+const fallback = require("../utils/sendNotificationFallback");
 const passwords = require("../controller/passwords");
 const parents = require("../controller/parent");
 const students = require("../controller/student");
@@ -102,9 +104,9 @@ const superAdminDoc = (school) =>
     M.SuperAdminModel.collection.insertOne({ _id: school, schoolName: "Green Hill", schoolInitials: "GH" });
 
 const EMAIL = {
-    "email fails": () => sendEmail.mockResolvedValue({ status: false, message: "not sent" }),
-    "email throws": () => sendEmail.mockRejectedValue(new Error("no connection")),
-    "email works": () => sendEmail.mockResolvedValue({ status: true, message: "sent" }),
+    "email fails": () => { sendEmail.mockResolvedValue({ status: false, message: "not sent" }); fallback.mockResolvedValue(false); },
+    "email throws": () => { sendEmail.mockRejectedValue(new Error("no connection")); fallback.mockRejectedValue(new Error("no connection")); },
+    "email works": () => { sendEmail.mockResolvedValue({ status: true, message: "sent" }); fallback.mockResolvedValue(true); },
 };
 
 describe.each(Object.keys(PATHS))("%s", (name) => {

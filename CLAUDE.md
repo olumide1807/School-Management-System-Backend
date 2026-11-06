@@ -315,7 +315,10 @@ Don't be surprised by these; don't silently "fix" them either.
   provider. `EMAIL_ENABLED` must be `true` (off otherwise), and `EMAIL_PROVIDER`
   picks `nodemailer` (default) or `sendgrid`. It never throws, so a failed send
   can't fail what triggered it; check `.status`. `sendNotificationFallback` is
-  the same send with retries.
+  the same send with retries and a breaker: 3 failed sends in 10 minutes pause
+  it for 5, logged as `EMAIL IS PAUSED`, then the next send tests the provider.
+  A refused address doesn't count. Reset codes pass `urgent` and are tried
+  regardless.
 - **Initial passwords are never emailed.** The API returns them and the admin
   screen shows them once; an inbox would keep them forever.
 

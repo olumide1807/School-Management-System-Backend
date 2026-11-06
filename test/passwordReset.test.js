@@ -7,7 +7,7 @@ process.env.JWT_SECRET = process.env.JWT_SECRET || "test-secret";
 process.env.JWT_EXPIRE = process.env.JWT_EXPIRE || "1h";
 
 // Email isn't configured; outside production the OTP goes to the console
-jest.mock("../utils/sendEmail", () => jest.fn(async () => ({ status: false, message: "not sent" })));
+jest.mock("../utils/sendNotificationFallback", () => jest.fn(async () => false));
 
 const crypto = require("crypto");
 const bcrypt = require("bcryptjs");

@@ -161,6 +161,26 @@ describe("a send that fails", () => {
     });
 });
 
+describe("what a refusal means, so the caller knows whether to retry", () => {
+    const refusal = (fields) => Object.assign(new Error("refused"), fields);
+    test.each([
+        ["a dropped connection", { code: "ETIMEDOUT" }, { retryable: true, recipientFault: false }],
+        ["SMTP busy (421)", { code: "ECONNECTION", responseCode: 421 }, { retryable: true, recipientFault: false }],
+        ["SendGrid unavailable (503)", { code: 503 }, { retryable: true, recipientFault: false }],
+        ["a wrong Gmail password", { code: "EAUTH", responseCode: 535 }, { retryable: false, recipientFault: false }],
+        ["credentials nodemailer refuses before asking", { code: "EAUTH" }, { retryable: false, recipientFault: false }],
+        ["Gmail's daily limit (550)", { code: "EMESSAGE", responseCode: 550 }, { retryable: false, recipientFault: false }],
+        ["a wrong SendGrid key", { code: 401 }, { retryable: false, recipientFault: false }],
+        ["a SendGrid sender not verified", { code: 403 }, { retryable: false, recipientFault: false }],
+        ["a refused address", { code: "EENVELOPE", responseCode: 550 }, { retryable: false, recipientFault: true }],
+        ["a request SendGrid won't take", { code: 400 }, { retryable: false, recipientFault: true }],
+    ])("%s", async (_name, fields, expected) => {
+        configure(GMAIL);
+        mockSendMail.mockRejectedValueOnce(refusal(fields));
+        expect(await send()).toMatchObject({ status: false, ...expected });
+    });
+});
+
 test("the startup line says what's on, and no setting's value", () => {
     configure(GMAIL);
     expect(emailStatus()).toBe("Email is on through nodemailer");
