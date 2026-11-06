@@ -100,8 +100,9 @@ const signToken = (payload) =>
 // body: { studentID, password }
 //
 // Students log in with the ID printed on their card rather than an
-// email, since most don't have one. The initial password is that same
-// ID, which is why mustChangePassword is true until they change it.
+// email, since most don't have one. Their first password is generated and
+// handed over by the school, so mustChangePassword is true until they change
+// it. Students registered before that was random may still have their ID.
 // ============================================================
 exports.studentLogin = asyncHandler(async (req, res, next) => {
     try {

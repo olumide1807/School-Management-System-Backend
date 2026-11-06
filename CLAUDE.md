@@ -264,6 +264,10 @@ running instance — this will double-mark if the API is ever scaled horizontall
   `controller/auth.js`). Parents log in with email.
 - `password` on `studentModel` is `select: false`. Fetch it explicitly when
   authenticating.
+- A student's first password is **random** (`generatePortalPassword`), and
+  `POST /student/register` returns it once as `initialPassword`. A CSV upload
+  is one such request per row. Students registered before this weren't
+  migrated: any who haven't changed theirs still have their student ID.
 - `mustChangePassword` defaults true on both students and parents; the frontend
   routes them to the change-password screen.
 - `scripts/hashStudentPasswords.js` was a one-off migration — early students
@@ -352,6 +356,8 @@ What's covered, and why it matters:
   terms, and a parent gets their own child's report, not the class's.
 - `buildFeeStatement.test.js` — kobo arithmetic, every status,
   `complete:false` for amounts it can't read, school scoping.
+- `studentFirstPassword.test.js` — new students sign in with the returned
+  password and not their ID; earlier students are left as they were.
 - `serverStartup.test.js` — the real `server.js` binds `PORT` (else 5002) and
   serves with `config/config.env` absent and the optional services unset.
 - `feeRoster.test.js` — the roster agrees with the statement for every

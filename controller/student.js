@@ -129,6 +129,12 @@ exports.registerStudent = asyncHandler(async (req, res, next) => {
       }
     }
 
+    // Random, and returned once below. It used to be the student ID, which is
+    // on their card and in every class list: any classmate could sign in, and
+    // whoever did first set the new password. Students registered before this
+    // keep theirs, so one who hasn't changed it still has their ID.
+    const initialPassword = generatePortalPassword();
+
     let object = {
       studentID: studentId,
       firstName,
@@ -143,7 +149,7 @@ exports.registerStudent = asyncHandler(async (req, res, next) => {
       stateOfOrigin,
       localGovernmentArea,
       address,
-      password: await GeneratePassword(studentId),
+      password: await GeneratePassword(initialPassword),
       schoolId,
       guardians: [],
       photo: photoUrl,
@@ -266,6 +272,7 @@ exports.registerStudent = asyncHandler(async (req, res, next) => {
         student: safeStudent,
         parentId,
       },
+      initialPassword,
       // Named for the parent so it can't be mistaken for the student's own;
       // null when no new parent was created
       parentInitialPassword,
@@ -389,8 +396,9 @@ exports.resetStudentPassword = asyncHandler(async (req, res, next) => {
     const student = await studentModel.findOne({ _id: id, schoolId });
     if (!student) return next(new ErrorResponse("Student not found", 404));
 
-    // Always random. A student's first password was their student ID, which
-    // is printed on their card; a reset must never hand that back. (The
+    // Always random. Students registered before first passwords were random
+    // may still have their student ID, which is printed on their card; a reset
+    // must never hand that back. (The
     // generator's alphabet has no "/", so it can't produce a student ID.)
     const plainPassword = generatePortalPassword();
     student.password = await GeneratePassword(plainPassword);
