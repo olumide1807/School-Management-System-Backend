@@ -5,8 +5,8 @@
 process.env.JWT_SECRET = process.env.JWT_SECRET || "test-secret";
 process.env.JWT_EXPIRE = process.env.JWT_EXPIRE || "1h";
 
-// SendGrid isn't configured: sending fails and the OTP goes to the console,
-// as it does in production today. No network in tests.
+// SendGrid isn't configured: sending fails and, outside production, the OTP
+// goes to the console. No network in tests.
 jest.mock("../utils/sendgrid", () => jest.fn(async () => ({ status: false, message: "not sent" })));
 
 const { generateRandomOTP } = require("../utils/generateRandomOTP");

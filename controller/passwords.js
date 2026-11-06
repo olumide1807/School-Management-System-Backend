@@ -11,6 +11,7 @@ const sendEmail = require("../utils/sendgrid");
 const { GeneratePassword } = require("../utils/index");
 const { sendTokenResponse } = require("../utils/sendResponseToken");
 const { generateRandomOTP } = require('../utils/generateRandomOTP');
+const { logInDevelopment } = require("../utils/logInDevelopment");
 const ErrorResponse = require("../utils/errorResponse");
 const { successResponse } = require("../utils/successResponse")
 
@@ -101,11 +102,11 @@ exports.forgotPassword = asyncHandler(async (req, res, next) => {
     const message = `Your password reset code is ${otp}. It lasts ${OTP_MINUTES} minutes. If you didn't ask for it, you can ignore this email.`;
     sendEmail(user.emailAddress, "Password reset code", message, `<p>${message}</p>`)
       .then((sent) => {
-        // Email isn't configured yet (CLAUDE.md §7): the code goes to the
-        // server console instead, never to the response
-        if (!sent?.status) console.log(`[DEV] OTP for ${user.emailAddress}: ${otp}`);
+        // Email isn't configured yet (CLAUDE.md §7): in development the code
+        // goes to the server console instead, never to the response
+        if (!sent?.status) logInDevelopment(`[DEV] OTP for ${user.emailAddress}: ${otp}`);
       })
-      .catch(() => console.log(`[DEV] OTP for ${user.emailAddress}: ${otp}`));
+      .catch(() => logInDevelopment(`[DEV] OTP for ${user.emailAddress}: ${otp}`));
     return;
   } catch (err) {
     console.error(err);

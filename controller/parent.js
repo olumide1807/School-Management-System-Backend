@@ -6,6 +6,7 @@ const { validateCreateParent, validateLinkStudent } = require("../middleware/val
 const ErrorResponse = require("../utils/errorResponse");
 const { createParent } = require("../utils/createParent");
 const { generatePortalPassword } = require("../utils/generatePortalPassword");
+const { logInDevelopment } = require("../utils/logInDevelopment");
 const { successResponse } = require("../utils/successResponse");
 
 const { GeneratePassword } = require("../utils");
@@ -44,9 +45,9 @@ exports.createParent = asyncHandler(async (req, res, next) => {
             const message = `An account has been created for you on the school portal.\nYour email is ${parent.email} and your password is ${parent.plainPassword}.\nYou'll be asked to change it when you first sign in.`;
             // await sendEmail(parent.email, "School Portal - Account Created", message, `<p>${message}</p>`);
             // TODO: email this once SendGrid is configured
-            console.log(`Parent created. Email: ${parent.email} · Password: ${parent.plainPassword}`);
+            logInDevelopment(`Parent created. Email: ${parent.email} · Password: ${parent.plainPassword}`);
         } catch (emailErr) {
-            console.log("Parent email failed. Password:", parent.plainPassword);
+            logInDevelopment("Parent email failed. Password:", parent.plainPassword);
         }
 
         if (studentID) {

@@ -13,6 +13,7 @@ const { isValidMongoId } = require("../utils/isValidMongoObjectId")
 // The one password generator (crypto, unambiguous alphabet). Never
 // Math.random: its output is predictable from a few earlier values.
 const { generatePortalPassword } = require("../utils/generatePortalPassword");
+const { logInDevelopment } = require("../utils/logInDevelopment");
 
 //middlewares
 const { asyncHandler } = require("../middleware");
@@ -72,7 +73,7 @@ exports.registerSuperAdmin = asyncHandler(async (req, res, next) => {
 
     // Generate a random password
     const randomPassword = generatePortalPassword();
-    console.log("Generated password for new Super Admin:", randomPassword);
+    logInDevelopment("Generated password for new Super Admin:", randomPassword);
 
     // Hash the password
     const hashedPassword = await GeneratePassword(randomPassword);
@@ -94,7 +95,7 @@ exports.registerSuperAdmin = asyncHandler(async (req, res, next) => {
         html
       );
     } catch (emailErr) {
-      console.log("Email sending failed, but account was created successfully. Password:", randomPassword);
+      console.log("Email sending failed, but account was created successfully.");
     }
 
     successResponse(
@@ -125,7 +126,7 @@ exports.acceptApplication = asyncHandler(async (req, res, next) => {
 
     // generate a random password
     const randomPassword = generatePortalPassword();
-    console.log(".................randomPassword............. ", randomPassword);
+    logInDevelopment("Generated password for new Super Admin:", randomPassword);
 
     // hash the random password
     const hashedPassword = await GeneratePassword(randomPassword);

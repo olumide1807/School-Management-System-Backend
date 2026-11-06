@@ -12,6 +12,7 @@ const { isValidMongoId } = require("../utils/isValidMongoObjectId");
 const cloudinary = require("../utils/cloudinary");
 const { GeneratePassword } = require("../utils");
 const { generatePortalPassword } = require("../utils/generatePortalPassword");
+const { logInDevelopment } = require("../utils/logInDevelopment");
 const sendEmail = require("../utils/sendgrid");
 
 // models
@@ -237,11 +238,11 @@ exports.registerStudent = asyncHandler(async (req, res, next) => {
       parentId = parent.id;
 
       // Same as POST /parent: until SendGrid is configured, the admin hands
-      // this over, so it's logged and returned. parent.plainPassword is the
-      // value createParent hashed.
+      // this over, so it's returned (and logged in development only).
+      // parent.plainPassword is the value createParent hashed.
       parentInitialPassword = parent.plainPassword;
       // TODO: email this once SendGrid is configured
-      console.log(`Parent created. Email: ${parent.email} · Password: ${parent.plainPassword}`);
+      logInDevelopment(`Parent created. Email: ${parent.email} · Password: ${parent.plainPassword}`);
 
       object.guardians.push({
         parentId,

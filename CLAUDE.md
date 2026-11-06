@@ -288,8 +288,12 @@ Don't be surprised by these; don't silently "fix" them either.
   a `.gitignore` entry. Until that's done, treat every credential in it as
   public.
 - **SendGrid is not configured.** Generated passwords are returned in API
-  responses and logged to the console instead of being emailed. That's a
-  deliberate stopgap, not an oversight — but it must not ship.
+  responses instead of being emailed, and the admin screens show them once.
+  Reset codes have no such route: until email works, forgot-password can't
+  work in production.
+- **Secrets never go to the console directly.** Reset codes and generated
+  passwords use `logInDevelopment`, which logs unless `NODE_ENV` is
+  `production`. So a deployed app must set `NODE_ENV=production`.
 - **Two staff-attendance systems.** `route/staffAttendance.js` and a legacy set
   of `/attendance` routes on the staff router both exist. The legacy one is
   dead; it hasn't been removed yet.
