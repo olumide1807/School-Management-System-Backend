@@ -6,7 +6,7 @@ const {
   GeneratePassword,
   ValidatePassword,
 } = require("../utils/index");
-const sendEmail = require("../utils/sendgrid");
+const sendEmail = require("../utils/sendEmail");
 const { sendTokenResponse } = require("../utils/sendResponseToken");
 const { successResponse } = require("../utils/successResponse");
 const { isValidMongoId } = require("../utils/isValidMongoObjectId")
@@ -148,8 +148,14 @@ exports.acceptApplication = asyncHandler(async (req, res, next) => {
       html
     );
 
+    // The account exists whether or not this was delivered, and the password
+    // can't be recovered later, so show it instead of failing
     if (!sendMessage.status) {
-      return next(new ErrorResponse(sendMessage.message, 400));
+      return successResponse(
+        res,
+        200,
+        `Registration successful! Your temporary password is: ${randomPassword} — Please save it and use it to login.`
+      );
     }
 
     successResponse(res, 200, sendMessage.message);

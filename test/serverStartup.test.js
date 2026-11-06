@@ -24,6 +24,7 @@ const database = () => {
 };
 
 let child;
+let output = "";
 afterEach(async () => {
     if (!child) return;
     const exited = new Promise((resolve) => child.once("exit", resolve));
@@ -37,7 +38,7 @@ afterAll(() => fs.rmSync(emptyFolder, { recursive: true, force: true }));
 const start = (env) =>
     new Promise((resolve, reject) => {
         child = spawn(process.execPath, [SERVER], { cwd: emptyFolder, env: { ...systemEnv, ...env } });
-        let output = "";
+        output = "";
         const read = (chunk) => {
             output += chunk;
             const on = output.match(/server is on (\S+)/);
@@ -99,4 +100,10 @@ test("falls back to 5002 with no PORT", async () => {
     }
     expect(await start({ MONGO_URI: database() })).toBe("5002");
     expect(await getWhenUp(5002, "/")).toBe(200);
+});
+
+test("says whether email is on, so a mistyped switch doesn't look like a quiet inbox", async () => {
+    await start({ NODE_ENV: "production", MONGO_URI: database(), JWT_SECRET: "x", PORT: String(await freePort()) });
+    for (let i = 0; i < 40 && !output.includes("Email is"); i++) await new Promise((r) => setTimeout(r, 250));
+    expect(output).toContain("Email is off");
 });

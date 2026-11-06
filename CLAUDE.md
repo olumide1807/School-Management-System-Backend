@@ -291,10 +291,8 @@ Don't be surprised by these; don't silently "fix" them either.
   file needs removing from the index (`git rm --cached config/config.env`) plus
   a `.gitignore` entry. Until that's done, treat every credential in it as
   public.
-- **SendGrid is not configured.** Generated passwords are returned in API
-  responses instead of being emailed, and the admin screens show them once.
-  Reset codes have no such route: until email works, forgot-password can't
-  work in production.
+- **Until `EMAIL_ENABLED=true` is set, no email goes out.** Reset codes have no
+  other route, so forgot-password can't work in production without it.
 - **Secrets never go to the console directly.** Reset codes and generated
   passwords use `logInDevelopment`, which logs unless `NODE_ENV` is
   `production`. So a deployed app must set `NODE_ENV=production`.
@@ -312,6 +310,14 @@ Don't be surprised by these; don't silently "fix" them either.
 ---
 
 ## 8. Conventions
+
+- **Email goes through `utils/sendEmail.js`**, the only code that talks to a
+  provider. `EMAIL_ENABLED` must be `true` (off otherwise), and `EMAIL_PROVIDER`
+  picks `nodemailer` (default) or `sendgrid`. It never throws, so a failed send
+  can't fail what triggered it; check `.status`. `sendNotificationFallback` is
+  the same send with retries.
+- **Initial passwords are never emailed.** The API returns them and the admin
+  screen shows them once; an inbox would keep them forever.
 
 - `asyncHandler` wraps every controller; errors go through
   `next(new ErrorResponse(msg, status))` to `middleware/error.js`.
@@ -356,6 +362,9 @@ What's covered, and why it matters:
   terms, and a parent gets their own child's report, not the class's.
 - `buildFeeStatement.test.js` — kobo arithmetic, every status,
   `complete:false` for amounts it can't read, school scoping.
+- `sendEmail.test.js` — the switch, both providers, nothing thrown or leaked.
+  `emailFlows.test.js` — what each flow emails, and that a failed send
+  never fails the flow.
 - `studentFirstPassword.test.js` — new students sign in with the returned
   password and not their ID; earlier students are left as they were.
 - `serverStartup.test.js` — the real `server.js` binds `PORT` (else 5002) and

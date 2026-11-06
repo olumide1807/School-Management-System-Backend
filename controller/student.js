@@ -13,7 +13,7 @@ const cloudinary = require("../utils/cloudinary");
 const { GeneratePassword } = require("../utils");
 const { generatePortalPassword } = require("../utils/generatePortalPassword");
 const { logInDevelopment } = require("../utils/logInDevelopment");
-const sendEmail = require("../utils/sendgrid");
+const sendEmail = require("../utils/sendEmail");
 
 // models
 const {

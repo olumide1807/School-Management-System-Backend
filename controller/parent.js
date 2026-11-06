@@ -10,7 +10,7 @@ const { logInDevelopment } = require("../utils/logInDevelopment");
 const { successResponse } = require("../utils/successResponse");
 
 const { GeneratePassword } = require("../utils");
-const sendEmail = require("../utils/sendgrid");
+const sendEmail = require("../utils/sendEmail");
 
 // models
 const {
@@ -41,14 +41,9 @@ exports.createParent = asyncHandler(async (req, res, next) => {
             return next(new ErrorResponse(`parent with this email: ${email} already exists in your school`, 400))
         }
 
-        try {
-            const message = `An account has been created for you on the school portal.\nYour email is ${parent.email} and your password is ${parent.plainPassword}.\nYou'll be asked to change it when you first sign in.`;
-            // await sendEmail(parent.email, "School Portal - Account Created", message, `<p>${message}</p>`);
-            // TODO: email this once SendGrid is configured
-            logInDevelopment(`Parent created. Email: ${parent.email} · Password: ${parent.plainPassword}`);
-        } catch (emailErr) {
-            logInDevelopment("Parent email failed. Password:", parent.plainPassword);
-        }
+        // The password goes back in the response for the admin to hand over,
+        // never by email: an inbox keeps it forever
+        logInDevelopment(`Parent created. Email: ${parent.email} · Password: ${parent.plainPassword}`);
 
         if (studentID) {
             if (!relationship) {
@@ -256,8 +251,8 @@ exports.resetParentPassword = asyncHandler(async (req, res, next) => {
             }
         }
 
-        // Delivery isn't mentioned: SendGrid isn't configured, and the admin
-        // UI shows this text alongside the password it hands over
+        // Delivery isn't mentioned: email can be off, and the admin UI shows
+        // this text alongside the password it hands over
         successResponse(res, 200, "Password has been reset", { newPassword: plainPassword });
     } catch (e) {
         console.error("Error resetting parent password:", e);

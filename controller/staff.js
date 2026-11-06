@@ -6,7 +6,7 @@ const { generatePortalPassword } = require("../utils/generatePortalPassword");
 const { GeneratePassword, ValidatePassword } = require("../utils");
 const ErrorResponse = require("../utils/errorResponse");
 const { sendTokenResponse } = require("../utils/sendResponseToken");
-const sendEmail = require("../utils/sendgrid");
+const sendEmail = require("../utils/sendEmail");
 const sendNotificationFallback = require("../utils/sendNotificationFallback");
 const { successResponse } = require("../utils/successResponse");
 const { isValidMongoId } = require("../utils/isValidMongoObjectId");
@@ -81,18 +81,6 @@ exports.createStaff = asyncHandler(async (req, res, next) => {
     // Create the staff in the database
     const newStaff = await staffModel.create(others);
 
-    // Send notification
-    const school = await SuperAdminModel.findById(schoolId);
-    const message = `Congratulations! You have been added to ${school.schoolName} as a staff (${newStaff.staffType}). Your Staff ID is ${staffID}, password is ${password}, and email is ${others.emailAddress}`; const html = `<p>${message}</p>`;
-    const title = `Addition into ${school.schoolName}'s staff team.`;
-    const sendMessage = await sendNotificationFallback(
-      others.emailAddress,
-      title,
-      message,
-      html
-    );
-    let additionalMessage = sendMessage ? "" : "but notification wasn't sent successfully to the staff's email address. Please help send the message manually.";
-
     // Set subject teachers
     if (assignedSubjects) {
       for (const subject of assignedSubjects) {
@@ -117,8 +105,9 @@ exports.createStaff = asyncHandler(async (req, res, next) => {
       }
     }
 
-    const successMessage = `Staff created successfully ${additionalMessage}`;
-    successResponse(res, 201, successMessage, {
+    // The password goes back here for the admin to hand over, never by email:
+    // an inbox keeps it forever
+    successResponse(res, 201, "Staff created successfully", {
       staffID,
       emailAddress: others.emailAddress,
       temporaryPassword: password

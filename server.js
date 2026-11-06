@@ -13,6 +13,7 @@ const Treblle = require("@treblle/express");
 // Session/term auto-activation scheduler
 const { startScheduler } = require("./utils/sessionScheduler");
 const { startAttendanceScheduler } = require("./utils/attendanceScheduler");
+const { emailStatus } = require("./utils/sendEmail");
 
 // Load env vars
 dotenv.config({ path: "./config/config.env" });
@@ -122,6 +123,7 @@ app.use(errorHandler);
 const PORT = process.env.PORT || 5002;
 app.listen(PORT, () => {
   console.log(`server is on ${PORT} `);
+  console.log(emailStatus());
   // Start the session/term auto-activation scheduler
   // Runs once on startup (after 5s delay) and then every hour
   startScheduler();

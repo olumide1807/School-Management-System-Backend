@@ -12,7 +12,7 @@ jest.mock("../utils/generatePortalPassword", () => ({
     generatePortalPassword: () => "KNOWNPASS22",
 }));
 jest.mock("../utils/generateRandomOTP", () => ({ generateRandomOTP: () => 654321 }));
-jest.mock("../utils/sendgrid", () => jest.fn());
+jest.mock("../utils/sendEmail", () => jest.fn());
 // Nothing fills this cache today (registration bypasses it), so
 // acceptApplication is unreachable, but its log line is still held here
 const mockInvitation = { value: undefined };
@@ -21,7 +21,7 @@ jest.mock("node-cache", () => function FakeCache() {
 });
 
 const M = require("../models");
-const sendEmail = require("../utils/sendgrid");
+const sendEmail = require("../utils/sendEmail");
 const passwords = require("../controller/passwords");
 const parents = require("../controller/parent");
 const students = require("../controller/student");
