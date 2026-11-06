@@ -269,7 +269,8 @@ running instance — this will double-mark if the API is ever scaled horizontall
   is one such request per row. Students registered before this weren't
   migrated: any who haven't changed theirs still have their student ID.
 - `mustChangePassword` defaults true on both students and parents; the frontend
-  routes them to the change-password screen.
+  routes them to the change-password screen. A student can't choose their own
+  ID as the new password.
 - `scripts/hashStudentPasswords.js` was a one-off migration — early students
   had their student ID stored as a plaintext password. It has been run. Don't
   run it again without checking.

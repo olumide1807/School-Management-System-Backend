@@ -261,6 +261,15 @@ exports.changeOwnPassword = asyncHandler(async (req, res, next) => {
             return next(new ErrorResponse("Current password is incorrect", 401));
         }
 
+        // It's printed on their card and it's what they sign in with, so it
+        // would let anyone holding the card in. Spaces and capitals don't help.
+        const squash = (text) => String(text).replace(/\s/g, "").toLowerCase();
+        if (role === "student" && squash(newPassword) === squash(account.studentID)) {
+            return next(new ErrorResponse(
+                "Your new password can't be your student ID", 400
+            ));
+        }
+
         const sameAsOld = await ValidatePassword(newPassword, account.password);
         if (sameAsOld) {
             return next(new ErrorResponse(
