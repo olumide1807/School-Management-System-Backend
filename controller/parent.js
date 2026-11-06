@@ -10,7 +10,6 @@ const { logInDevelopment } = require("../utils/logInDevelopment");
 const { successResponse } = require("../utils/successResponse");
 
 const { GeneratePassword } = require("../utils");
-const sendEmail = require("../utils/sendEmail");
 
 // models
 const {
@@ -238,21 +237,8 @@ exports.resetParentPassword = asyncHandler(async (req, res, next) => {
         parent.mustChangePassword = true;
         await parent.save();
 
-        // Same as the student reset: only try when there's an address, and
-        // never let delivery decide whether the reset succeeded — it already
-        // has. The password itself is never logged.
-        if (parent.email) {
-            try {
-                const message = `Your school portal password has been reset.\nYour new password is ${plainPassword}.`;
-                const sent = await sendEmail(parent.email, "School Portal - Password Reset", message, `<p>${message}</p>`);
-                if (!sent?.status) console.error(`Reset email to parent ${parent._id} was not delivered`);
-            } catch (e) {
-                console.error(`Reset email to parent ${parent._id} failed: ${e}`);
-            }
-        }
-
-        // Delivery isn't mentioned: email can be off, and the admin UI shows
-        // this text alongside the password it hands over
+        // Shown on screen, never emailed: an inbox keeps it forever. The
+        // password itself is never logged.
         successResponse(res, 200, "Password has been reset", { newPassword: plainPassword });
     } catch (e) {
         console.error("Error resetting parent password:", e);

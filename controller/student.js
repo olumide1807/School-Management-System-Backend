@@ -13,7 +13,6 @@ const cloudinary = require("../utils/cloudinary");
 const { GeneratePassword } = require("../utils");
 const { generatePasswordFor } = require("../utils/ownIdentifiers");
 const { logInDevelopment } = require("../utils/logInDevelopment");
-const sendEmail = require("../utils/sendEmail");
 
 // models
 const {
@@ -405,20 +404,9 @@ exports.resetStudentPassword = asyncHandler(async (req, res, next) => {
     student.mustChangePassword = true;
     await student.save();
 
-    // Many students have no email. Only try when there is one, and never let
-    // delivery decide whether the reset succeeded — it already has.
-    if (student.email) {
-      try {
-        const message = `Your school portal password has been reset.\nYour new password is ${plainPassword}.`;
-        const sent = await sendEmail(student.email, "School Portal - Password Reset", message, `<p>${message}</p>`);
-        if (!sent?.status) console.error(`Reset email to student ${student._id} was not delivered`);
-      } catch (e) {
-        console.error(`Reset email to student ${student._id} failed: ${e}`);
-      }
-    }
-
     // Only the new plain password goes back — never the document, so the
-    // hash can't leak
+    // hash can't leak. It's shown on screen, never emailed: an inbox keeps it
+    // forever.
     successResponse(res, 200, "Password has been reset", { newPassword: plainPassword });
   } catch (e) {
     console.error(`Error resetting student password: ${e}`);

@@ -68,7 +68,7 @@ const staffDoc = (schoolId, more = {}) => M.staffModel.create({
     schoolId, firstName: "Tunde", surname: "Bello", emailAddress: "tunde@greenhill.ng", staffType: "academic", password: "old-hash", ...more,
 });
 
-describe("initial passwords are shown, never emailed", () => {
+describe("passwords are shown, never emailed", () => {
     test("a new staff member", async () => {
         const schoolId = await school();
         const r = await run(staff.createStaff, { ...asSchool(schoolId), body: { firstName: "Tunde", surname: "Bello", emailAddress: "tunde@greenhill.ng" } });
@@ -81,6 +81,41 @@ describe("initial passwords are shown, never emailed", () => {
     test("a new parent", async () => {
         const r = await run(parents.createParent, { ...asSchool(await school()), body: { ...parentDetails } });
         expect(r.status).toBe(201);
+        expect(mailed()).toEqual([]);
+    });
+
+    test.each([
+        ["staff", async (id) => run(staff.resetStaffPassword, { ...asSchool(id), params: { id: String((await staffDoc(id))._id) } })],
+        ["student", async (id) => {
+            const doc = await f.student(id, (await f.classArm(id))._id, { email: "tobi@example.com" });
+            return run(students.resetStudentPassword, { ...asSchool(id), params: { id: String(doc._id) } });
+        }],
+        ["parent", async (id) => {
+            const doc = await M.parentModel.create({ ...parentDetails, schoolId: id, password: "old-hash" });
+            return run(parents.resetParentPassword, { ...asSchool(id), params: { id: String(doc._id) } });
+        }],
+    ])("an admin resetting a %s's password", async (_who, reset) => {
+        const r = await reset(await school());
+        expect(r.status).toBe(200);
+        expect(r.body.data.newPassword).toBeTruthy();
+        expect(r.body.message).toBe("Password has been reset");
+        expect(mailed()).toEqual([]);
+    });
+
+    test("a school signing up: the password in the response signs in", async () => {
+        const r = await run(superAdmin.registerSuperAdmin, { body: adminDetails("signup@greenhill.ng") });
+        expect(r.status).toBe(200);
+        const password = r.body.message.match(/temporary password is: (\S+)/)[1];
+        expect((await run(superAdmin.loginSuperAdmin, { body: { email: "signup@greenhill.ng", password } })).status).toBe(200);
+        expect(mailed()).toEqual([]);
+    });
+
+    test("accepting an invitation: the password is in the response", async () => {
+        mockInvitation.value = adminDetails("invited@greenhill.ng");
+        const r = await run(superAdmin.acceptApplication, { params: { signature: "s" } });
+        expect(r.status).toBe(200);
+        expect(r.body.message).toMatch(/temporary password is: \S+/);
+        expect(await M.SuperAdminModel.countDocuments({ emailAddress: "invited@greenhill.ng" })).toBe(1);
         expect(mailed()).toEqual([]);
     });
 
@@ -158,35 +193,6 @@ describe.each([["delivered", true], ["not delivered", false]])("whatever trigger
         expect(r.status).toBe(201);
     });
 
-    test("a school signing up", async () => {
-        const r = await run(superAdmin.registerSuperAdmin, { body: adminDetails(`signup${works}@greenhill.ng`) });
-        expect(r.status).toBe(200);
-        expect(await M.SuperAdminModel.countDocuments({ emailAddress: `signup${works}@greenhill.ng` })).toBe(1);
-    });
-
-    test("accepting an invitation", async () => {
-        mockInvitation.value = adminDetails(`invited${works}@greenhill.ng`);
-        const r = await run(superAdmin.acceptApplication, { params: { signature: "s" } });
-        expect(r.status).toBe(200);
-        expect(await M.SuperAdminModel.countDocuments({ emailAddress: `invited${works}@greenhill.ng` })).toBe(1);
-    });
-
-    test.each([
-        ["staff", async (id) => run(staff.resetStaffPassword, { ...asSchool(id), params: { id: String((await staffDoc(id))._id) } })],
-        ["student", async (id) => {
-            const doc = await f.student(id, (await f.classArm(id))._id, { email: "tobi@example.com" });
-            return run(students.resetStudentPassword, { ...asSchool(id), params: { id: String(doc._id) } });
-        }],
-        ["parent", async (id) => {
-            const doc = await M.parentModel.create({ ...parentDetails, schoolId: id, password: "old-hash" });
-            return run(parents.resetParentPassword, { ...asSchool(id), params: { id: String(doc._id) } });
-        }],
-    ])("an admin resetting a %s's password", async (_who, reset) => {
-        const r = await reset(await school());
-        expect(r.status).toBe(200);
-        expect(r.body.data.newPassword).toBeTruthy();
-    });
-
     test("asking for a reset code answers the same", async () => {
         const schoolId = await school();
         await staffDoc(schoolId);
@@ -194,11 +200,4 @@ describe.each([["delivered", true], ["not delivered", false]])("whatever trigger
         await settle();
         expect(r.status).toBe(200);
     });
-});
-
-test("accepting an invitation with the email undelivered still hands over the password", async () => {
-    delivery(false);
-    mockInvitation.value = adminDetails("undelivered@greenhill.ng");
-    const r = await run(superAdmin.acceptApplication, { params: { signature: "s" } });
-    expect(r.body.message).toMatch(/temporary password is: \S+/);
 });

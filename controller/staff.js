@@ -907,29 +907,8 @@ exports.resetStaffPassword = asyncHandler(async (req, res, next) => {
     staff.password = hashedPassword;
     await staff.save();
 
-    // Send new password via email
-    const school = await SuperAdminModel.findById(schoolId);
-    const message = `Your password for ${school?.schoolName || 'the school'} has been reset by an administrator. Your new password is: ${newPassword}. Please log in and change it immediately.`;
-    const html = `<p>${message}</p>`;
-    const subject = `Password Reset - ${school?.schoolName || 'School Management System'}`;
-
-    let emailSent = false;
-    try {
-      emailSent = await sendNotificationFallback(
-        staff.emailAddress,
-        subject,
-        message,
-        html
-      );
-    } catch (emailErr) {
-      console.log("Email notification failed for password reset.");
-    }
-
-    const emailNote = emailSent
-      ? `New password has been sent to ${staff.emailAddress}`
-      : `Password reset successful. Email notification failed — please share the new password manually: ${newPassword}`;
-
-    successResponse(res, 200, emailNote, { newPassword });
+    // Shown on screen, never emailed: an inbox keeps it forever
+    successResponse(res, 200, "Password has been reset", { newPassword });
   } catch (error) {
     console.error("Error resetting staff password:", error);
     next(error);

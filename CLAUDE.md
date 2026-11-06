@@ -328,8 +328,9 @@ Don't be surprised by these; don't silently "fix" them either.
   it for 5, logged as `EMAIL IS PAUSED`, then the next send tests the provider.
   A refused address doesn't count. Reset codes pass `urgent` and are tried
   regardless.
-- **Initial passwords are never emailed.** The API returns them and the admin
-  screen shows them once; an inbox would keep them forever.
+- **Passwords are never emailed**, at creation or reset. The API returns them
+  and the screen shows them once; an inbox would keep them forever.
+  `emailFlows.test.js` holds every path to this.
 
 - `asyncHandler` wraps every controller; errors go through
   `next(new ErrorResponse(msg, status))` to `middleware/error.js`.

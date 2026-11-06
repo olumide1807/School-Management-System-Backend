@@ -79,25 +79,13 @@ exports.registerSuperAdmin = asyncHandler(async (req, res, next) => {
     const hashedPassword = await GeneratePassword(randomPassword);
 
     // Create the user directly in the database (bypassing email approval)
-    const user = await SuperAdminModel.create({
+    await SuperAdminModel.create({
       ...req.body,
       password: hashedPassword,
     });
 
-    // Try to send email notification, but don't fail if it doesn't work
-    try {
-      const message = `Your account has been created.\n Your password is ${randomPassword} and email is ${user.emailAddress}`;
-      const html = `<p>${message}</p>`;
-      await sendEmail(
-        user.emailAddress,
-        "School Management System - Account Created",
-        message,
-        html
-      );
-    } catch (emailErr) {
-      console.log("Email sending failed, but account was created successfully.");
-    }
-
+    // The only copy of the password: shown on screen, never emailed. If it's
+    // lost, forgot-password is the way back, which needs email to be on.
     successResponse(
       res,
       200,
@@ -132,33 +120,17 @@ exports.acceptApplication = asyncHandler(async (req, res, next) => {
     const hashedPassword = await GeneratePassword(randomPassword);
 
     // create the user in the database
-    const user = await SuperAdminModel.create({
+    await SuperAdminModel.create({
       ...superAdminInfo,
       password: hashedPassword,
     });
 
-    // configure notification system.
-    const message = `Congratulations!. Your application has been accepted and Your account has been created.\n Your password is ${randomPassword} and email is ${user.emailAddress}`;
-    const html = `<p>${message}</p>`;
-
-    const sendMessage = await sendEmail(
-      user.emailAddress,
-      "Acceptance of Application Into School Management System.",
-      message,
-      html
+    // Shown on screen, never emailed, the same as signing up
+    successResponse(
+      res,
+      200,
+      `Registration successful! Your temporary password is: ${randomPassword} — Please save it and use it to login.`
     );
-
-    // The account exists whether or not this was delivered, and the password
-    // can't be recovered later, so show it instead of failing
-    if (!sendMessage.status) {
-      return successResponse(
-        res,
-        200,
-        `Registration successful! Your temporary password is: ${randomPassword} — Please save it and use it to login.`
-      );
-    }
-
-    successResponse(res, 200, sendMessage.message);
   } catch (err) {
     console.error("error creating school", err);
     next(err);
