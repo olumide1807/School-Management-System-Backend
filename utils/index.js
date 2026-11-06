@@ -14,14 +14,10 @@ module.exports.ValidatePassword = async (enteredPassword,savedPassword) => {
   return await bcrypt.compare(enteredPassword,savedPassword)
 };
 
-module.exports.GenerateSignature =  (payload) => {
-  try {
-    return  jwt.sign({id:payload},process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRE });
-  } catch (error) {
-    console.log(error);
-    return error;
-  }
-};
+// Throws if it can't sign (no JWT_SECRET or JWT_EXPIRE): callers put the result
+// straight in a response, so returning the error sent a 200 with token: {}.
+module.exports.GenerateSignature = (payload) =>
+  jwt.sign({ id: payload }, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRE });
 
 module.exports.ValidateSignature = async (req) => {
   try {
