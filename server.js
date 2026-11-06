@@ -113,11 +113,6 @@ app.use("/staff-attendance", staffAttendanceRouter);
 app.use("/auth", authRouter);
 app.use("/portal", require("./route/portal"));
 
-// debug route
-app.get("/debug-sentry", function mainHandler(req, res) {
-  throw new Error("My first Sentry error!");
-});
-
 // 404 route
 app.use("*" || "*/*", NotFoundRouter);
 

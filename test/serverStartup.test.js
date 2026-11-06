@@ -85,6 +85,8 @@ test("listens on PORT, with no config.env and Sentry, Treblle, SendGrid and Clou
     expect(await start({ PORT: String(port), MONGO_URI: database() })).toBe(String(port));
     expect(await getWhenUp(port, "/")).toBe(200);
     expect(await get(port, "/no-such-route")).toBe(404);
+    // The debug route that threw on demand is gone
+    expect(await get(port, "/debug-sentry")).toBe(404);
     expect(child.exitCode).toBeNull();
 });
 
