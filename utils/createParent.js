@@ -1,5 +1,5 @@
 const { GeneratePassword } = require("./index");   // or wherever it lives
-const { generatePortalPassword } = require("./generatePortalPassword");
+const { generatePasswordFor } = require("./ownIdentifiers");
 
 const createParent = async (email, schoolId, model, data) => {
     // check if the parent exists in the school by email address
@@ -15,7 +15,7 @@ const createParent = async (email, schoolId, model, data) => {
     // The only place a parent's initial password is generated. Callers read
     // it back from newParent.plainPassword, so what they report is exactly
     // what was hashed — they must not set data.password themselves.
-    const plainPassword = generatePortalPassword();
+    const plainPassword = generatePasswordFor(data);
     data.password = await GeneratePassword(plainPassword);
 
     // create a new parent using the tabled info

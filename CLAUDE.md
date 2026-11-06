@@ -82,6 +82,15 @@ A teacher-facing route that 403s is usually missing `"academic"` in its
   them by name (`.select("+resetPasswordToken")`) or filter on them; never
   return them.
 
+### A password can't be the account's own identifiers
+`utils/ownIdentifiers.js` is the one check, for every kind of account: ID,
+email (and the part before the @), phone (0803… and +234803… are the same),
+names, and for a school its email, name and initials. Capitals, spacing and
+punctuation are ignored; only an exact match counts. Anything accepting a chosen
+password calls `ownIdentifierProblem`; anything generating one calls
+`generatePasswordFor`, never `generatePortalPassword` directly. Reset-by-code
+refuses before spending the token.
+
 ### Privilege escalation
 `PUT /staff/:id` is self-service and **must** keep its field whitelist
 (`selfEditableFields` in `controller/staff.js`, mirrored by the Joi schema in
@@ -269,8 +278,7 @@ running instance — this will double-mark if the API is ever scaled horizontall
   is one such request per row. Students registered before this weren't
   migrated: any who haven't changed theirs still have their student ID.
 - `mustChangePassword` defaults true on both students and parents; the frontend
-  routes them to the change-password screen. A student can't choose their own
-  ID as the new password.
+  routes them to the change-password screen.
 - `scripts/hashStudentPasswords.js` was a one-off migration — early students
   had their student ID stored as a plaintext password. It has been run. Don't
   run it again without checking.
@@ -369,6 +377,8 @@ What's covered, and why it matters:
 - `sendEmail.test.js` — the switch, both providers, nothing thrown or leaked.
   `emailFlows.test.js` — what each flow emails, and that a failed send
   never fails the flow.
+- `ownIdentifierPassword.test.js` — every path that sets a password, by
+  account type and identifier; the edit routes can't set one at all.
 - `studentFirstPassword.test.js` — new students sign in with the returned
   password and not their ID; earlier students are left as they were.
 - `serverStartup.test.js` — the real `server.js` binds `PORT` (else 5002) and

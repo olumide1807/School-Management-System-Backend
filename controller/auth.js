@@ -2,6 +2,7 @@ const asyncHandler = require("../middleware/async");
 const ErrorResponse = require("../utils/errorResponse");
 const { staffModel, studentModel, parentModel } = require("../models");
 const { ValidatePassword, GeneratePassword } = require("../utils");
+const { ownIdentifierProblem } = require("../utils/ownIdentifiers");
 const jwt = require("jsonwebtoken");
 
 // ============================================================
@@ -261,14 +262,8 @@ exports.changeOwnPassword = asyncHandler(async (req, res, next) => {
             return next(new ErrorResponse("Current password is incorrect", 401));
         }
 
-        // It's printed on their card and it's what they sign in with, so it
-        // would let anyone holding the card in. Spaces and capitals don't help.
-        const squash = (text) => String(text).replace(/\s/g, "").toLowerCase();
-        if (role === "student" && squash(newPassword) === squash(account.studentID)) {
-            return next(new ErrorResponse(
-                "Your new password can't be your student ID", 400
-            ));
-        }
+        const problem = ownIdentifierProblem(newPassword, account);
+        if (problem) return next(new ErrorResponse(problem, 400));
 
         const sameAsOld = await ValidatePassword(newPassword, account.password);
         if (sameAsOld) {

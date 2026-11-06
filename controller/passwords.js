@@ -9,6 +9,7 @@ const { asyncHandler } = require("../middleware");
 // utils
 const sendNotificationFallback = require("../utils/sendNotificationFallback");
 const { GeneratePassword } = require("../utils/index");
+const { ownIdentifierProblem } = require("../utils/ownIdentifiers");
 const { sendTokenResponse } = require("../utils/sendResponseToken");
 const { generateRandomOTP } = require('../utils/generateRandomOTP');
 const { logInDevelopment } = require("../utils/logInDevelopment");
@@ -210,22 +211,28 @@ exports.resetPassword = asyncHandler(async (req, res, next) => {
       return next(new ErrorResponse(error.details[0].message, 400));
     }
 
-    // The token from verifyOTP is the only thing that identifies the
-    // account. Setting the password and clearing the token is one atomic
-    // update, so a token works exactly once — two requests racing with it
-    // can't both succeed — and an expired one never matches.
+    // Wrong, already used or expired: the same answer for each
+    const notValid = () => next(new ErrorResponse('This reset link has expired or has already been used. Request a new code to start again.', 400));
+
+    // The token from verifyOTP is the only thing that identifies the account
+    const match = { resetPasswordToken: sha256(req.body.token), resetPasswordExpire: { $gt: new Date() } };
+    const account = (await SuperAdmin.findOne(match)) || (await staffModel.findOne(match));
+    if (!account) return notValid();
+
+    // Refused before the token is spent, so they can choose again. Only
+    // someone holding a live token gets this far.
+    const problem = ownIdentifierProblem(req.body.password, account);
+    if (problem) return next(new ErrorResponse(problem, 400));
+
+    // Setting the password and clearing the token is one atomic update, so a
+    // token works exactly once — two requests racing with it can't both
+    // succeed — and an expired one never matches.
     const hashedPassword = await GeneratePassword(req.body.password);
     const consume = {
       $set: { password: hashedPassword, resetPasswordToken: null, resetPasswordExpire: null },
     };
-    const match = { resetPasswordToken: sha256(req.body.token), resetPasswordExpire: { $gt: new Date() } };
-    const user =
-      (await SuperAdmin.findOneAndUpdate(match, consume)) ||
-      (await staffModel.findOneAndUpdate(match, consume));
-    if (!user) {
-      // Wrong, already used or expired: the same answer for each
-      return next(new ErrorResponse('This reset link has expired or has already been used. Request a new code to start again.', 400));
-    }
+    const user = await account.constructor.findOneAndUpdate({ ...match, _id: account._id }, consume);
+    if (!user) return notValid();
     successResponse(res, 200, "Password reset successful. Please login with your new password.");
   } catch (err) {
     console.error(err);

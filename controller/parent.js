@@ -5,7 +5,7 @@ const { validateCreateParent, validateLinkStudent } = require("../middleware/val
 // utils
 const ErrorResponse = require("../utils/errorResponse");
 const { createParent } = require("../utils/createParent");
-const { generatePortalPassword } = require("../utils/generatePortalPassword");
+const { generatePasswordFor } = require("../utils/ownIdentifiers");
 const { logInDevelopment } = require("../utils/logInDevelopment");
 const { successResponse } = require("../utils/successResponse");
 
@@ -233,7 +233,7 @@ exports.resetParentPassword = asyncHandler(async (req, res, next) => {
         const parent = await parentModel.findOne({ _id: req.params.id, schoolId });
         if (!parent) return next(new ErrorResponse("Parent not found", 404));
 
-        const plainPassword = generatePortalPassword();
+        const plainPassword = generatePasswordFor(parent);
         parent.password = await GeneratePassword(plainPassword);
         parent.mustChangePassword = true;
         await parent.save();

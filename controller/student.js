@@ -11,7 +11,7 @@ const { successResponse } = require("../utils/successResponse");
 const { isValidMongoId } = require("../utils/isValidMongoObjectId");
 const cloudinary = require("../utils/cloudinary");
 const { GeneratePassword } = require("../utils");
-const { generatePortalPassword } = require("../utils/generatePortalPassword");
+const { generatePasswordFor } = require("../utils/ownIdentifiers");
 const { logInDevelopment } = require("../utils/logInDevelopment");
 const sendEmail = require("../utils/sendEmail");
 
@@ -133,7 +133,7 @@ exports.registerStudent = asyncHandler(async (req, res, next) => {
     // on their card and in every class list: any classmate could sign in, and
     // whoever did first set the new password. Students registered before this
     // keep theirs, so one who hasn't changed it still has their ID.
-    const initialPassword = generatePortalPassword();
+    const initialPassword = generatePasswordFor({ studentID: studentId, firstName, surName, otherName, email, phoneNumber });
 
     let object = {
       studentID: studentId,
@@ -400,7 +400,7 @@ exports.resetStudentPassword = asyncHandler(async (req, res, next) => {
     // may still have their student ID, which is printed on their card; a reset
     // must never hand that back. (The
     // generator's alphabet has no "/", so it can't produce a student ID.)
-    const plainPassword = generatePortalPassword();
+    const plainPassword = generatePasswordFor(student);
     student.password = await GeneratePassword(plainPassword);
     student.mustChangePassword = true;
     await student.save();

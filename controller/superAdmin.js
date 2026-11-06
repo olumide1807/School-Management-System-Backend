@@ -12,7 +12,7 @@ const { successResponse } = require("../utils/successResponse");
 const { isValidMongoId } = require("../utils/isValidMongoObjectId")
 // The one password generator (crypto, unambiguous alphabet). Never
 // Math.random: its output is predictable from a few earlier values.
-const { generatePortalPassword } = require("../utils/generatePortalPassword");
+const { generatePasswordFor, ownIdentifierProblem } = require("../utils/ownIdentifiers");
 const { logInDevelopment } = require("../utils/logInDevelopment");
 
 //middlewares
@@ -72,7 +72,7 @@ exports.registerSuperAdmin = asyncHandler(async (req, res, next) => {
     }
 
     // Generate a random password
-    const randomPassword = generatePortalPassword();
+    const randomPassword = generatePasswordFor(req.body);
     logInDevelopment("Generated password for new Super Admin:", randomPassword);
 
     // Hash the password
@@ -125,7 +125,7 @@ exports.acceptApplication = asyncHandler(async (req, res, next) => {
     }
 
     // generate a random password
-    const randomPassword = generatePortalPassword();
+    const randomPassword = generatePasswordFor(superAdminInfo);
     logInDevelopment("Generated password for new Super Admin:", randomPassword);
 
     // hash the random password
@@ -393,6 +393,9 @@ exports.updatePassword = asyncHandler(async (req, res, next) => {
     ) {
       return next(new ErrorResponse(`Current password is incorrect`, 401));
     }
+
+    const problem = ownIdentifierProblem(req.body.newPassword, superAdmin);
+    if (problem) return next(new ErrorResponse(problem, 400));
 
     // Generate and save the new hashed password
     const hashedPassword = await GeneratePassword(req.body.newPassword);

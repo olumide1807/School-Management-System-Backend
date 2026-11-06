@@ -2,7 +2,7 @@
 const { getStaffByEmail } = require("./../dbCrudFunctions/staff");
 // The one password generator for every account type (staff, parents,
 // students, super admins): crypto, unambiguous alphabet, ~49 bits
-const { generatePortalPassword } = require("../utils/generatePortalPassword");
+const { generatePasswordFor, ownIdentifierProblem } = require("../utils/ownIdentifiers");
 const { GeneratePassword, ValidatePassword } = require("../utils");
 const ErrorResponse = require("../utils/errorResponse");
 const { sendTokenResponse } = require("../utils/sendResponseToken");
@@ -69,14 +69,14 @@ exports.createStaff = asyncHandler(async (req, res, next) => {
       others.profilePicture = result.secure_url;
     }
 
-    // Generate random password and hash it
-    const password = generatePortalPassword();
-    const hashedPassword = await GeneratePassword(password);
-    others.password = hashedPassword;
-
     // Auto-generate staff ID
     const staffID = await generateStaffId(schoolId, SuperAdminModel, staffModel);
     others.staffID = staffID;
+
+    // Generate random password and hash it
+    const password = generatePasswordFor(others);
+    const hashedPassword = await GeneratePassword(password);
+    others.password = hashedPassword;
 
     // Create the staff in the database
     const newStaff = await staffModel.create(others);
@@ -341,6 +341,9 @@ exports.updateStaffPassword = asyncHandler(async (req, res, next) => {
         )
       );
     }
+
+    const problem = ownIdentifierProblem(req.body.newPassword, staff);
+    if (problem) return next(new ErrorResponse(problem, 400));
 
     // Hash the new password
     const hashedPassword = await GeneratePassword(req.body.newPassword);
@@ -899,7 +902,7 @@ exports.resetStaffPassword = asyncHandler(async (req, res, next) => {
     }
 
     // Generate new random password
-    const newPassword = generatePortalPassword();
+    const newPassword = generatePasswordFor(staff);
     const hashedPassword = await GeneratePassword(newPassword);
     staff.password = hashedPassword;
     await staff.save();

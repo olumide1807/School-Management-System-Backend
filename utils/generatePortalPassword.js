@@ -2,6 +2,8 @@ const crypto = require("crypto");
 
 // Every generated password: initial or reset passwords for staff, parents,
 // students and super admins. One generator, so they're all made one way.
+// Controllers call generatePasswordFor (ownIdentifiers.js), which checks the
+// result against the account.
 //
 // These are mostly read aloud — office staff phone them to parents with no
 // email — so the alphabet is single-case with the confusable characters
