@@ -1,5 +1,13 @@
 const { GenerateSignature } = require("./index");
 
+// Where the token cookie applies. The domain comes from COOKIE_DOMAIN; with
+// none, it's left off and the browser ties the cookie to the host that set it.
+// Shared with logout, which only clears a cookie with the same domain and path.
+exports.tokenCookieScope = () => ({
+  path: "/",
+  ...(process.env.COOKIE_DOMAIN ? { domain: process.env.COOKIE_DOMAIN } : {}),
+});
+
 // Get token from model, create cookie and send response
 exports.sendTokenResponse = (userID, statusCode, res, data = null) => {
   // Create token
@@ -9,10 +17,7 @@ exports.sendTokenResponse = (userID, statusCode, res, data = null) => {
     expires: new Date(Date.now() + 4 * 60 * 60 * 1000), // 4 hours in milliseconds
     httpOnly: true,
     signed: true,
-    // domain: "onrender.com",
-    domain: "localhost",
-
-    path: "/",
+    ...exports.tokenCookieScope(),
   };
 
   // console.log( "processENV", process.env.NODE_ENV);
@@ -20,11 +25,6 @@ exports.sendTokenResponse = (userID, statusCode, res, data = null) => {
 
   if (process.env.NODE_ENV === "production") {
     options.secure = true;
-    options.domain = "sms-l7y1.onrender.com";
-  }
-
-  if (process.env.NODE_ENV === "development") {
-    options.domain = "localhost";
   }
 
   try {

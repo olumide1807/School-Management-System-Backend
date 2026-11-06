@@ -57,6 +57,10 @@ Rules baked into the middleware:
   `"academic"` / `"non-academic"` / `"admin"`).
 - `isAdmin` staff also satisfy `"academic"` and `"non-academic"`.
 
+The token cookie's domain comes from `COOKIE_DOMAIN`; unset, it's left off and
+the cookie stays on the host that set it. Never hardcode one: browsers reject
+it on any other host. (The frontend signs in with the Bearer token.)
+
 A teacher-facing route that 403s is usually missing `"academic"` in its
 `allowedRoles` — that's how `timetable-grid/settings` broke.
 

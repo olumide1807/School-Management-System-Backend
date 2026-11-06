@@ -1,10 +1,11 @@
+const { tokenCookieScope } = require("../utils/sendResponseToken");
+
 exports.logout = async (req, res, next) => {
   try {
     res.clearCookie("token", {
-      domain: process.env.NODE_ENV === "production" ? "sms-l7y1.onrender.com" : "localhost",
       httpOnly: true,
       signed: true,
-      path: "/",
+      ...tokenCookieScope(),
     });
 
     req.user = null;
