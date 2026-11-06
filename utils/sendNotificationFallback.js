@@ -4,6 +4,12 @@ let maxRetries = 5; // Maximum number of retries
 let retries = 0; // Current number of retries
 
 async function sendNotificationFallback(emailAddress, subject, message, html) {
+    // Nothing can be sent without a key, so don't make anyone wait on retries
+    if (!process.env.SENDGRID_API_KEY?.trim()) {
+        console.log("Email isn't configured (no SENDGRID_API_KEY), so nothing was sent.");
+        return false;
+    }
+
     let success = false;
 
     while (!success && retries < maxRetries) {
